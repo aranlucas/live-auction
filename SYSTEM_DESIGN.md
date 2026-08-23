@@ -2,13 +2,26 @@
 
 ## The 30-second opening
 
-> I’ll design an English ascending live-commerce auction. Viewers see price changes, authenticated bidders submit bids, and the system selects at most one winner. I’ll focus on ordering, deadlines, durability, retry safety, and realtime delivery; video and payment remain adjacent systems.
+> I'll design an English ascending live-commerce auction. Viewers see price changes, signed-in bidders place higher bids, and the system picks no more than one winner. I'll focus on bid order, deadlines, durable state, safe retries, and live updates. Video and payment are separate systems.
 >
-> Every committed state transition for one auction needs one authoritative order. There is no need for global ordering, so I’ll partition by auction ID and give each auction one logical authority. This project implements that authority with a Durable Object. Realtime sockets can scale separately because they never decide state.
+> Every saved change to one auction needs one official order. Unrelated auctions do not need to share an order. I can split the work by auction ID and give each auction one logical authority. This project uses a Durable Object for that authority. WebSockets can scale separately because they only deliver results. They do not decide which bid wins.
 
-For an interview, keep the first sentence vendor-neutral: use **one logical auction authority per
-auction ID**. Then say that this working project implements that authority with a Cloudflare Durable
-Object. This demonstrates a concrete design without assuming the interviewer wants Cloudflare.
+In an interview, start with "one logical auction authority per auction ID." This describes the
+design without tying it to a vendor. This project uses a Cloudflare Durable Object as that
+authority.
+
+## Terms used in this guide
+
+| Term            | Plain meaning                                                     |
+| --------------- | ----------------------------------------------------------------- |
+| Authority       | The only component allowed to decide the state of one auction.    |
+| Commit          | Save a change successfully so it survives a restart.              |
+| Idempotent      | Safe to repeat without applying the same change twice.            |
+| Idempotency key | A request ID that lets the server recognize a retry.              |
+| Fanout          | Send one saved auction update to many connected viewers.          |
+| Cursor          | The sequence number of the last event a client received.          |
+| Invariant       | A rule the system must never break.                               |
+| State machine   | The allowed auction states and the rules for moving between them. |
 
 ## 45-minute delivery plan
 
@@ -16,58 +29,61 @@ Object. This demonstrates a concrete design without assuming the interviewer wan
 | ----------- | ---------------------------------------------------------- |
 | 0:00-5:00   | Scope, functional and nonfunctional requirements           |
 | 5:00-7:00   | Core entities                                              |
-| 7:00-12:00  | REST, idempotency, authentication, and realtime contracts  |
-| 12:00-25:00 | End-to-end working architecture                            |
+| 7:00-12:00  | REST, retry safety, authentication, and live update APIs   |
+| 12:00-25:00 | Complete working architecture                              |
 | 25:00-38:00 | Contention, deadlines, reconnects, fanout, and failures    |
 | 38:00-43:00 | Hot-auction scale, multi-region latency, and decomposition |
 | 43:00-45:00 | Tradeoffs and summary                                      |
 
-## How the interview might actually go
+## How the interview can go
 
-The goal is not to recite the entire design. Build a small correct system first, make the
-correctness boundary explicit, and let the interviewer choose which risks to explore. The dialogue
-below is a rehearsal, not a script that must be repeated word for word.
+Do not try to recite the whole design. Start with a small system that handles bids correctly. Show
+which component owns that correctness, then let the interviewer choose what to examine next. Use
+the dialogue below to practice. You do not need to repeat it word for word.
 
-### 0:00-5:00 — Establish scope and success criteria
+### 0:00-5:00: Set the scope and goals
 
 **Interviewer:** Design a live-auction system.
 
 **Candidate:**
 
-> I’ll design a live-commerce English auction where a seller presents one lot, viewers watch, and
-> authenticated bidders submit increasing bids. I’ll focus on bid correctness, closing, retry
-> safety, and realtime state. I’ll show video delivery and payment settlement as adjacent systems
+> I'll design a live-commerce English auction where a seller presents one lot, viewers watch, and
+> signed-in bidders place higher bids. I'll focus on correct bids, closing, safe retries, and live
+> state updates. I'll show video delivery and payment settlement as separate systems
 > unless you want either designed in depth.
 
-Ask four or five questions, then state assumptions so this phase does not consume the interview:
+Ask four or five questions. If the interviewer does not answer one, state your assumption and move
+on:
 
-1. Is this a normal ascending auction or a proxy/max-bid auction?
+1. Is this a normal ascending auction, or does each bidder enter a maximum and let the system bid
+   for them?
 2. Is there one active lot per show, and can a show contain sequential lots?
 3. Is the end a hard deadline, or do bids near the end extend it?
 4. Is brief unavailability preferable to accepting bids that could produce conflicting winners?
 5. What scale should I target: total concurrent viewers, viewers on one hot auction, and peak bid
    attempts per second?
 
-If the interviewer does not supply scale, continue with explicit working assumptions:
+If the interviewer does not give you scale numbers, use these assumptions:
 
 - English ascending auction, one active lot per show.
-- Integer minor currency units and a configured minimum increment.
+- Prices use whole minor currency units, such as cents, with a configured minimum increase.
 - A bid inside the final ten seconds extends the deadline by ten seconds.
-- The prototype targets thousands of viewers on a hot lot; a production design must make fanout
-  shard count elastic for exceptionally large shows.
+- The prototype targets thousands of viewers on one popular lot. A production system must be able
+  to add fanout shards for much larger shows.
 - Payment eligibility is checked before bidding and settlement begins after close. Those checks are
   requirements, not implemented features of this prototype.
-- During an ambiguous authority failure, reject or time out bids rather than risk two winners.
+- If the auction authority may be unavailable, reject or time out bids instead of risking two
+  winners.
 
-Then state the key invariant early:
+State the main rule early:
 
-> Within one auction, accepted bids, seller actions, deadline changes, and close must have one
-> authoritative commit order. We do not need a global order across unrelated auctions, so auction
-> ID is the natural partition key.
+> Within one auction, accepted bids, seller actions, deadline changes, and closing must have one
+> official commit order. Unrelated auctions do not need a shared order, so I split the work by
+> auction ID.
 
-This sentence should drive the rest of the interview.
+Use this rule to guide every later choice.
 
-### 5:00-7:00 — Name only the core entities
+### 5:00-7:00: Name the core entities
 
 Write these on the board without designing every column:
 
@@ -110,25 +126,25 @@ classDiagram
     Auction "1" *-- "many" IdempotencyRecord
 ```
 
-An `IdempotencyRecord` is not another user action and it is not the current auction state. It is the
-server’s durable memory of one request:
+An `IdempotencyRecord` is the server's saved memory of one request. It is separate from the current
+auction state:
 
 - `actorId + idempotencyKey` identifies one seller action or bid attempt.
-- `fingerprint` records what that request meant, such as “bid 10,000 cents.”
-- `originalResponse` is the exact response produced when that request first committed.
+- `fingerprint` records what the request meant, such as "bid 10,000 cents."
+- `originalResponse` is the exact response produced when the request first saved successfully.
 
-> A client can lose a successful response and retry after other bids have occurred. Returning the
-> current auction would not be an exact retry. I persist a record containing the complete original
-> response under the actor and idempotency key.
+> A client can lose a successful response and retry after later bids. Returning the current auction
+> would give it a different result. I save the complete original response under the actor and
+> idempotency key.
 
-For example, bidder A’s `$100` bid commits but its HTTP response is lost. Bidder B then raises the
-price to `$110`. When bidder A retries the same key, the idempotency record returns A’s original `$100`
-acceptance with `replayed: true`; it does not pretend A originally bid at the newer price.
+For example, bidder A's `$100` bid succeeds, but its HTTP response is lost. Bidder B then raises the
+price to `$110`. When bidder A retries the same key, the record returns A's original `$100` success
+with `replayed: true`. It does not return the newer `$110` state as A's result.
 
-Do not add users, products, chat, payments, shipments, and video segments to the main auction
-transaction. They can be referenced by ID or placed beside the core system later.
+Keep users, products, chat, payments, shipments, and video segments outside the main auction
+transaction. Refer to them by ID or add them as separate systems later.
 
-### 7:00-12:00 — Define the contracts
+### 7:00-12:00: Define the API contracts
 
 Draw or say the minimum API surface:
 
@@ -142,34 +158,34 @@ GET  /v1/auctions/{auctionId}/history?afterSequence=N
 GET  /v1/auctions/{auctionId}/events?afterSequence=N  # WebSocket upgrade
 ```
 
-Call out three contract decisions:
+Explain three API choices:
 
 - `PUT` creation uses a client-chosen auction ID, so identical creation retries are naturally
   idempotent.
 - Mutating `POST` requests require an `Idempotency-Key`; identity comes from a verified JWT, never
   from a bidder ID in JSON.
-- Realtime messages contain the authoritative event sequence. WebSocket delivery is recoverable,
-  not the source of truth.
+- Live messages contain the official event sequence. WebSocket delivery can be repaired and does
+  not own auction state.
 
-If asked why WebSockets rather than polling, say that polling is still a recovery and fallback
-interface, while WebSockets reduce state-change latency and repeated reads for live viewers.
+Polling is still the fallback and recovery method. WebSockets show changes sooner and avoid
+repeated reads for live viewers.
 
-Keep seller and bidder authority separate:
+Give each role separate permissions:
 
 | Actor  | Allowed mutations                                              |
 | ------ | -------------------------------------------------------------- |
 | Seller | Create, start, close after the deadline, or cancel its auction |
 | Bidder | Place an idempotent bid on a live auction                      |
-| Viewer | Read state/history and subscribe to realtime events            |
+| Viewer | Read state/history and subscribe to live events                |
 
 A seller token cannot bid, and a bidder token cannot start, close, or cancel an auction.
 
-### 12:00-25:00 — Draw the smallest complete architecture
+### 12:00-25:00: Draw the smallest complete architecture
 
-Build the design in layers. Each layer answers a requirement introduced earlier and preserves the
-same correctness boundary. Do not draw the final platform all at once.
+Add one layer at a time. Each layer should solve a requirement without changing which component
+owns auction correctness.
 
-#### Complexity 1 — One correct request path
+#### Complexity 1: One correct request path
 
 Start with only the boxes needed to accept a bid correctly:
 
@@ -188,19 +204,19 @@ flowchart LR
     Gateway --> Bidder
 ```
 
-Say: “Every request for auction A reaches the same logical owner. Different auction IDs resolve to
-different owners and scale independently.” At this point you have established ordering without
-discussing storage, sockets, video, or payments.
+"Every request for auction A reaches the same logical owner. Different auction IDs have different
+owners and scale independently." This explains order without adding storage, sockets, video, or
+payments.
 
-The gateway is the stateless public server. In this project it is a Cloudflare Worker running Hono.
-The Durable Object is the stateful auction owner; only it can accept or reject an action. A
-committed event is added in complexity 3, and the idempotency record is added inside storage in
-complexity 2. The gateway is not another origin server placed in front of the Worker; it is the
-logical role the Worker performs.
+The gateway is the public server and holds no auction state. In this project, it is a Cloudflare
+Worker running Hono. The Durable Object owns the auction state and is the only component that can
+accept or reject an action. Complexity 2 adds stored idempotency records. Complexity 3 adds events
+after they commit. The gateway is not a separate origin server in front of the Worker. "Gateway"
+is the role that the Worker performs.
 
-#### Complexity 2 — Make correctness durable
+#### Complexity 2: Save the state needed for correct results
 
-Now open the authority box and add only the state needed for retries and deadlines:
+Inside the authority, add the state needed for safe retries and deadlines:
 
 ```mermaid
 flowchart LR
@@ -218,12 +234,13 @@ flowchart LR
     Auction -->|exact stored response| Gateway
 ```
 
-This layer explains durable idempotency, anti-sniping, recovery after eviction, and at-most-one
-winner. The bid, price, event, idempotency record, and any deadline change commit together.
+This state supports safe retries, deadline extensions for last-second bids, recovery after a
+Durable Object restart or eviction, and no more than one winner. The bid, price, event,
+idempotency record, and any deadline change save in one transaction.
 
-#### Complexity 3 — Add realtime delivery without weakening correctness
+#### Complexity 3: Add live updates
 
-Only after the write path is correct, add the simplest realtime path:
+Once the bid path is correct, add the simplest live update path:
 
 ```mermaid
 flowchart LR
@@ -244,13 +261,13 @@ flowchart LR
     Viewer -.->|"large gap: GET /history"| Gateway
 ```
 
-The authority still makes every auction decision; realtime delivery only reports committed state.
-Do not add fanout shards to the interview drawing unless audience scale becomes the chosen deep
-dive. The complete production diagram later splits WebSocket delivery into shards.
+The authority still makes every auction decision. Live delivery only reports saved state. Leave
+fanout shards out of this first drawing unless the interviewer asks about audience scale. The full
+production diagram adds separate WebSocket shards.
 
-#### Complexity 4 — Add adjacent product systems
+#### Complexity 4: Add the other product systems
 
-Finish with the systems intentionally kept outside the bid transaction:
+Add the systems that stay outside the bid transaction:
 
 ```mermaid
 flowchart LR
@@ -275,30 +292,30 @@ flowchart LR
     Auction -.->|auction.closed| Outbox --> Workflow --> Settlement
 ```
 
-Video may lag and settlement may retry, but neither participates in choosing the winning bid. The
-complete reference diagram later in this guide is the combination of these four layers.
+Video may be behind live auction state, and settlement may retry. Neither system chooses the
+winning bid. The full diagram later in this guide combines all four layers.
 
-Say this while drawing the authority:
+Explain the authority this way:
 
-> Every action request for auction A resolves to the same logical object. That object processes state
-> transitions sequentially and stores the auction, bids, events, and idempotency records together.
-> This gives me a single-writer state machine without a distributed lock. Auctions B and C resolve
-> to different objects and scale independently.
+> Every action for auction A reaches the same logical object. That object puts saved state changes
+> in one order. It stores the auction, bids, events, and idempotency records together. This gives me
+> one writer for each auction without a distributed lock. Auctions B and C use different objects
+> and scale independently.
 
-Then distinguish decision making from delivery:
+Separate decisions from delivery:
 
-> The authority accepts or rejects bids. Realtime delivery only distributes the result. If delivery
+> The authority accepts or rejects bids. Live delivery only sends the result. If delivery
 > is slow or unavailable, it must not change the winning bid.
 
-After complexity 2, the design is already complete enough to be correct. Complexity 3 makes it
-usable for a live audience, and complexity 4 makes the product boundary explicit. Ask the
-interviewer where they want to go deeper while offering the most important choices:
+After complexity 2, the auction can already choose a winner correctly. Complexity 3 serves a live
+audience. Complexity 4 shows the rest of the product. Ask which risk the interviewer wants to
+examine:
 
-> The highest-risk areas are simultaneous bids, exact retries, closing at the deadline, and the
-> snapshot-to-WebSocket race. I can start with bid contention and closing unless you prefer realtime
-> or multi-region latency.
+> The highest-risk areas are bids that arrive together, exact retries, closing at the deadline, and
+> an event arriving between the first snapshot and the WebSocket subscription. I can start with
+> competing bids and closing unless you prefer live delivery or multi-region latency.
 
-### 25:00-38:00 — Drive the correctness deep dives
+### 25:00-38:00: Explain the hard correctness cases
 
 #### Deep dive 1: two simultaneous equal bids
 
@@ -326,35 +343,34 @@ sequenceDiagram
     DO-->>B: Rejected: BID_TOO_LOW
 ```
 
-Explain the guarantee precisely: “serialize” means the authority establishes one commit order for
-state transitions. It does not mean global FIFO, client-click order, or that an arbitrary async RPC
-method runs from beginning to end without interleaving. The diagram chooses A as first only to show
-the result; network arrival and runtime scheduling could choose B instead.
+Here, "serialize" means the authority gives saved state changes one commit order. It does not mean
+global first-in-first-out order, click order, or that every async RPC method runs from start to
+finish without another event running. The diagram puts A first only as an example. Network arrival
+and runtime scheduling could put B first.
 
-| Scope                                   | What Durable Objects provide                                             |
-| --------------------------------------- | ------------------------------------------------------------------------ |
-| Same auction ID                         | Deterministic routing to one logical object and its private storage      |
-| Calls made on the same stub             | Delivered in the order the caller made them                              |
-| Calls from different clients or Workers | No global FIFO or client-time ordering guarantee                         |
-| Local SQLite transition                 | One atomic commit or rollback, protected by storage concurrency controls |
-| Code around arbitrary external `await`  | May interleave with another event; do not rely on whole-method exclusion |
-| Different auction IDs                   | Independent objects with no shared order                                 |
+| Scope                                   | Guarantee                                                                   |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| Same auction ID                         | Routes to one logical object with private storage.                          |
+| Calls made on the same stub             | Arrive in the order that caller made them.                                  |
+| Calls from different clients or Workers | Have no global first-in-first-out or client-time order.                     |
+| Local SQLite state change               | Fully commits or fully rolls back under storage concurrency controls.       |
+| Code around an external `await`         | May overlap another event, so the whole method is not automatically locked. |
+| Different auction IDs                   | Use independent objects and share no order.                                 |
 
-> One auction ID resolves to one authority. That authority gives committed state transitions one
-> order, and the next transition evaluates the resulting state. This is a single-writer state
-> machine without a distributed application lock; it is not a global FIFO queue.
+> One auction ID reaches one authority. That authority gives saved state changes one order. Each
+> change reads the result of the change before it. This gives each auction one writer without a
+> distributed application lock. It is not a global first-in-first-out queue.
 
-The important answer is not merely “single threaded.” The correctness-critical path stays inside
-local transactional storage: deadline validation, bid insertion, price and leader update, event
-append, idempotency record, and any alarm change commit together. Storage input gates and the
-SQLite transaction protect that transition. An external `fetch()`, Workers KV call, or other
-unrelated `await` could permit interleaving, so none belongs between reading auction state and
-committing the bid. No external cache is allowed to decide the current minimum.
+Calling the object "single threaded" is not enough. All work that decides a bid stays inside local
+transactional storage. The deadline check, bid insert, price and leader update, event append,
+idempotency record, and alarm change commit together. Storage input gates and the SQLite
+transaction protect this work. An external `fetch()`, Workers KV call, or unrelated `await` could
+let another event run. Keep those calls outside the state read and bid commit. An external cache
+must never decide the current minimum.
 
-If the interviewer proposes a conventional database instead, note that a row transaction can also
-serialize this transition. The Durable Object combines deterministic entity routing, execution,
-private storage, and the deadline alarm in one boundary; it does not eliminate the need to define
-the transaction correctly.
+A row transaction in a normal database can also put these changes in order. The Durable Object
+combines routing by auction ID, code execution, private storage, and the deadline alarm in one
+place. You still must define the transaction correctly.
 
 #### Deep dive 2: the response is lost
 
@@ -378,78 +394,79 @@ sequenceDiagram
     DO-->>A: Same USD 100 success, replayed=true
 ```
 
-The idempotency record is why A does not receive the current `$110` state as if it were A’s original
-result. Reusing `A-7` with a different amount does not match the stored fingerprint and returns
+The idempotency record stops A from receiving the current `$110` state as its original result.
+Reusing `A-7` with a different amount does not match the stored fingerprint and returns
 `IDEMPOTENCY_KEY_REUSED`.
 
-This is a strong opportunity to correct “exactly once” language:
+Be precise about "exactly once":
 
-> Networks do not give exactly-once delivery. This design gives effectively-once state transitions
-> for cooperating clients through durable idempotency; realtime event delivery remains at least
+> Networks do not give exactly-once delivery. Durable idempotency makes each action change state
+> effectively once when clients reuse their key. Live event delivery remains at least
 > once and cursor-recoverable.
 
 #### Deep dive 3: deadline and anti-sniping
 
-Use server time only. A bid transaction reads the persisted deadline, rejects late bids, and, when
-inside the anti-snipe window, updates the deadline and storage alarm atomically. The alarm closes
-the auction idempotently. Reads and bids also run close-if-due so a delayed alarm cannot leave an
-expired auction accepting bids.
+Use only server time. A bid transaction reads the saved deadline and rejects late bids. A bid in
+the anti-snipe window updates the deadline and storage alarm in the same transaction. The alarm can
+safely try to close the auction more than once. Reads and bids also close an overdue auction, so a
+late alarm cannot leave it open for new bids.
 
 If the interviewer asks about a bid arriving at the exact deadline:
 
-> The authority compares its server time to the persisted deadline. Client timestamps are not
-> trusted. Once the authority establishes a transaction order, each outcome is deterministic from
-> committed state. Which client reaches that order first still depends on network and scheduling
-> latency; client clocks cannot safely resolve that product-fairness tradeoff.
+> The authority compares server time with the saved deadline. It does not trust client timestamps.
+> Once transactions have an order, saved state determines each result. Network and scheduling
+> delays still decide which client gets into that order first. Client clocks cannot safely make
+> that choice fair.
 
 #### Deep dive 4: reconnect without missing an event
 
-Explain the snapshot/subscribe gap: if a client reads a snapshot and an event commits before its
-subscription becomes active, it can miss the event. This design makes a fanout shard bootstrap the
-socket as not-ready, fetch the authoritative snapshot and cursor, replay messages that arrived
-during bootstrap, and only then mark the socket ready.
+There is a gap between reading a snapshot and starting a subscription. An event that saves during
+that gap could be missed. To prevent this, the fanout shard first marks the socket as not ready. It
+gets the official snapshot and cursor, replays messages that arrived during setup, and then marks
+the socket ready.
 
-Clients reconnect with `afterSequence`. A bounded gap is replayed from the shard; a larger gap sets
-`resyncRequired`, causing the client to fetch authoritative history.
+Clients reconnect with `afterSequence`. The shard can replay a limited number of missed events. If
+the gap is too large, it sets `resyncRequired`, and the client gets the official history.
 
-### 38:00-43:00 — Scale and challenge your own design
+### 38:00-43:00: Explain scale and limits
 
-Separate three scaling dimensions:
+Scale depends on three different things:
 
-| Dimension                   | Scaling response                                                         |
-| --------------------------- | ------------------------------------------------------------------------ |
-| Number of auctions          | Partition naturally by auction ID across authority objects.              |
-| Viewers on one auction      | Add fanout shards; sockets never write auction state.                    |
-| Bid attempts on one auction | One sequencer is intentional; benchmark and shed abusive/duplicate load. |
+| Dimension                   | Scaling response                                                          |
+| --------------------------- | ------------------------------------------------------------------------- |
+| Number of auctions          | Split them by auction ID across authority objects.                        |
+| Viewers on one auction      | Add fanout shards. Sockets never write auction state.                     |
+| Bid attempts on one auction | Keep one sequencer, measure its limit, and drop abusive or repeated load. |
 
-Be explicit that one exceptionally hot auction is the difficult case. The current model uses four
-fixed fanout shards and an application cap per shard. A production system would choose the shard
-count from audience size, use an assignment directory or stable rendezvous hashing, and load-test
-the authority’s sequential bid capacity. Do not invent a throughput number without measurement.
+One very popular auction is the hardest case. The current model uses four fixed fanout shards and
+an application limit on each shard. A production system would choose the number of shards from the
+audience size. It could assign viewers through a directory or stable rendezvous hashing. It must
+also load test the authority's sequential bid capacity. Do not claim a throughput number without a
+measurement.
 
-For global bidders, acknowledge that the authority has one physical location and therefore one
-region has a latency advantage. Reasonable options are locating the authority near the expected
-audience, showing a deadline adjusted for estimated latency only as UI, or changing the product to
-scheduled bid windows/proxy bidding. Multi-primary bid acceptance would require consensus and is a
-major increase in complexity.
+The authority has one physical location, so bidders in one region will have lower latency. You can
+place the authority near the expected audience. The UI can show a deadline adjusted for estimated
+latency, but that display cannot decide whether a bid counts. You can also change the product to
+use scheduled bid windows or proxy bidding. Accepting bids in several primary regions would need
+consensus and add much more complexity.
 
-### 43:00-45:00 — Close with the design and its limitation
+### 43:00-45:00: End with the design and its limits
 
 Use a compact summary:
 
-> I partition by auction ID and use one Durable Object as the auction’s sequencer, transactional
-> store, and deadline owner. JWT-authenticated, schema-validated actions reach that authority;
+> I split auctions by ID and use one Durable Object to order actions, store state, and own the
+> deadline for each auction. JWT-authenticated, schema-validated actions reach that authority.
 > SQLite transactions and durable idempotency protect bid correctness. Alarms plus close-if-due
-> recovery select at most one winner. Separate fanout objects distribute ordered events, while
-> cursors and history repair disconnects. Video and settlement are asynchronous adjacent systems.
-> The main tradeoffs are single-auction sequential throughput, geographic latency to one authority,
+> recovery select at most one winner. Separate fanout objects send ordered events. Cursors and
+> history repair gaps after disconnects. Video and settlement run separately and asynchronously.
+> The main limits are sequential throughput within one auction, distance from the one authority,
 > and Cloudflare-specific operations.
 
-Then stop. Leave the final minute for the interviewer rather than adding unrelated services.
+Stop there and leave the final minute for questions.
 
 ## Whiteboard build order
 
-If you tend to lose time while drawing, use this sequence:
+Use this drawing order if you tend to run out of time:
 
 ```mermaid
 flowchart TD
@@ -465,62 +482,63 @@ flowchart TD
     A --> B --> C --> D --> E --> F --> G --> H
 ```
 
-Avoid beginning with every Cloudflare product. Each box should answer a requirement or a failure
-mode already established in the conversation.
+Do not start with every Cloudflare product. Each box should solve a requirement or failure already
+discussed.
 
 ## Likely interviewer pushback
 
 ### Why not Kafka plus a conventional database?
 
-That is a valid alternative. Partitioning a command log by auction ID can also provide ordering,
-but the design must coordinate log consumption, transactional state, idempotency records, timers, and
-realtime gateways. Durable Objects collapse those responsibilities into one per-entity execution
-and storage boundary. Kafka may be preferable for portability, extremely high aggregate event
-throughput, or an organization that already operates it.
+Kafka with a normal database is a valid design. A command log split by auction ID can also order
+actions. You would still need to coordinate the log consumer, database transactions, idempotency
+records, timers, and live gateways. A Durable Object puts those jobs into one execution and
+storage boundary for each auction. Kafka may be a better fit when portability or very high total
+event throughput matters, or when the company already runs Kafka.
 
 ### Why not put every viewer socket on the authority object?
 
-Correctness work and bulk delivery would then contend for the same object. A slow or extremely
-large audience could delay bid processing. Fanout shards isolate socket lifecycle and broadcast
-cost while keeping the authority as the only state machine.
+Bid decisions and socket delivery would compete for the same object. A slow or very large audience
+could delay bids. Fanout shards handle sockets and broadcasts, while the authority remains the only
+auction state machine.
 
 ### What if the bid commits but event publication fails?
 
-The bid remains correct and a reconnect repairs state from the authority/history. The prototype’s
-post-commit publication can delay a live update for an already-connected viewer until a later
-refresh. Production should add a transactional outbox in the authority and retry publication until
-acknowledged. Do not claim the current `waitUntil` publication closes that failure window.
+The bid stays saved. A reconnect repairs the viewer's state from the authority or history. In this
+prototype, publication happens after the commit. If publication fails, a connected viewer may not
+see the update until a later refresh. A production system should save events in a transactional
+outbox and retry publication until it succeeds. The current `waitUntil` call does not close this
+gap.
 
 ### How do you prevent fake bidders or cross-auction demo credentials?
 
-The edge verifies JWT signature, issuer, audience, expiry, subject, and role. The browser’s demo
-tokens also contain an auction scope, which middleware checks before object lookup. A production
-system would add account status, auction membership, payment eligibility, risk controls, and
-possibly bid limits; a role claim alone is only the prototype’s authorization model.
+The edge verifies the JWT signature, issuer, audience, expiry, subject, and role. Demo tokens in the
+browser also name one auction, and middleware checks that scope before it looks up the object. A
+production system would also check account status, auction membership, payment eligibility, risk,
+and possibly bid limits. The prototype only uses the role claim for authorization.
 
 ### What happens with 100,000 viewers on one lot?
 
-Do not send 100,000 socket writes through the authority. Increase delivery shards, assign viewers
-deterministically, cap each shard, and use bounded replay plus authoritative history. The number of
-shards is a capacity-planning result, not a correctness constant.
+Do not make the authority send to 100,000 sockets. Add delivery shards, assign each viewer to one
+shard, limit the number of sockets on each shard, and recover with bounded replay plus official
+history. Load tests and capacity plans should determine the number of shards. Correctness does not
+depend on a fixed count.
 
 ### Can you guarantee fairness for a bidder on another continent?
 
-The system guarantees one authoritative commit order, not FIFO by click time or equal network
-latency. Trusting client timestamps would create a fraud and clock-skew problem. Product mitigations
-include proxy bidding, longer anti-snipe extensions, or regional eligibility rules. True
-active-active acceptance requires consensus on each auction’s order.
+The system guarantees one official commit order. It does not guarantee click order or equal
+network delay. Client timestamps can be false or have clock errors, so they cannot set the order.
+Proxy bidding, longer anti-snipe extensions, or regional eligibility rules can reduce the effect.
+True active-active bid acceptance would need consensus on each auction's order.
 
 ### Is the auction closed exactly once?
 
-The close state transition is idempotent and records one authoritative close event. The alarm may
-be delivered more than once, and downstream payment messages may be delivered more than once, so
-consumers still need idempotency. Say “one durable state transition,” not “the network runs once.”
+Closing is idempotent and saves one official close event. The alarm may run more than once, and a
+payment message may arrive more than once. Consumers still need idempotency. Say "one durable state
+change," not "the network runs once."
 
 ## What the working project proves
 
-The implementation is useful interview evidence, but it should support the design rather than
-replace reasoning:
+Use the working code as evidence for the design. It does not replace the explanation:
 
 | Design claim                              | Project evidence                                                                                                                                       |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -532,51 +550,59 @@ replace reasoning:
 | Contention, alarms, roles, and reconnects | [`test/auction.spec.ts`](./test/auction.spec.ts), [`test/durable-object.integration.spec.ts`](./test/durable-object.integration.spec.ts)               |
 | Deployed end-to-end behavior              | [`scripts/production-integration.ts`](./scripts/production-integration.ts), [`artifacts/integration-report.html`](./artifacts/integration-report.html) |
 
-Be honest about what it does not prove: real payment eligibility, video ingest, searchable
-catalogs, dynamic fanout shard assignment, 100,000-viewer load, and transactional outbox delivery
-remain production extensions.
+The project does not prove real payment eligibility, video ingest, searchable catalogs, dynamic
+fanout shard assignment, support for 100,000 viewers, or transactional outbox delivery. Those are
+still production work.
 
 ## Common interview mistakes
 
 - Starting with product names instead of requirements and invariants.
 - Saying a cache or WebSocket server owns the current price.
 - Using client timestamps to decide whether a deadline bid counts.
-- Saying “exactly once” without defining idempotency and delivery semantics.
+- Saying "exactly once" without explaining safe retries and message delivery.
 - Adding Kafka, queues, D1, KV, and multiple regions before completing one correct bid flow.
 - Ignoring the response-lost-after-commit case.
 - Letting fanout failure roll back or invalidate an accepted bid.
 - Claiming fixed per-object throughput without a benchmark.
 - Spending half the interview on video encoding when bid correctness is the core problem.
 
-## 1. Requirements and invariants
+## 1. Requirements and rules
 
-Assume an English auction with one logical lot, server time, integer minor currency units, minimum increments, and an optional anti-sniping extension. Payment eligibility is checked before bidding; capture begins asynchronously after close. Correctness is preferred over accepting bids during ambiguous failure.
+Assume an English auction with one lot. It uses server time, integer minor currency units, minimum
+bid increases, and an optional anti-sniping extension. The system checks payment eligibility before
+bidding. It starts payment capture asynchronously after closing. If the authority may be failing,
+the system protects correctness instead of accepting more bids.
 
-The principal invariants are:
+These rules must always hold:
 
-1. One auction has one committed state-transition order and monotonically increasing event sequence.
-2. A bid is accepted only while `LIVE`, before the authoritative deadline, and at or above the current minimum.
+1. One auction has one order for saved state changes, and its event sequence always increases.
+2. The system accepts a bid only while the auction is `LIVE`, before the official deadline, and at
+   or above the current minimum.
 3. One accepted action produces one durable event; a retry returns its original result.
-4. A deadline and its alarm change atomically with the state transition that establishes them.
+4. The deadline, its alarm, and the state change that sets them save in one transaction.
 5. Closing is idempotent and chooses at most one winner.
-6. Realtime delivery can duplicate or disconnect, but clients can recover from an authoritative cursor.
+6. Live delivery can repeat messages or disconnect, but clients can recover from an official
+   cursor.
 
-## 2. Entities and interfaces
+## 2. Data and APIs
 
-- `Auction`: seller, prices, state, leader, winner, bid count, configuration, timestamps, and version.
-- `Bid`: server-generated ID, bidder, amount, accepted timestamp, and sequence.
-- `AuctionEvent`: discriminated type and payload, actor, time, and authoritative sequence.
-- `IdempotencyRecord`: actor, idempotency key, action type, request fingerprint, event sequence, and the exact original response JSON used to replay a request safely.
-- `FanoutMessage`: resulting snapshot, event, and cursor retained on one delivery shard.
+- `Auction` stores the seller, prices, state, leader, winner, bid count, settings, times, and version.
+- `Bid` stores a server-generated ID, bidder, amount, accepted time, and sequence.
+- `AuctionEvent` stores its type, matching payload, actor, time, and official sequence.
+- `IdempotencyRecord` stores the actor, key, action type, request fingerprint, event sequence, and
+  exact original response JSON. The server uses it to replay a request safely.
+- `FanoutMessage` stores the resulting snapshot, event, and cursor on one delivery shard.
 
-Important API choices:
+API choices:
 
-- `PUT /v1/auctions/{auctionId}` gives creation a stable, naturally retryable identity.
-- JWT `sub` determines actor identity; a verified `role` claim determines authorization. Bidder IDs never come from request JSON.
+- `PUT /v1/auctions/{auctionId}` uses a stable ID, so a client can safely retry creation.
+- JWT `sub` gives the actor's identity. A verified `role` claim controls what the actor can do.
+  Request JSON never supplies the bidder ID.
 - Every mutating `POST` requires `Idempotency-Key`.
-- `GET /history?afterSequence=N` is the full recovery interface.
-- `GET /events?afterSequence=N` upgrades using subprotocols `auction.v1` and `auth.<JWT>` and begins with a snapshot/catch-up envelope.
-- `GET /openapi.json` exposes the Zod-derived OpenAPI contract.
+- `GET /history?afterSequence=N` returns the official history for recovery.
+- `GET /events?afterSequence=N` upgrades to a WebSocket with the `auction.v1` and `auth.<JWT>`
+  subprotocols. It starts with a snapshot and missed events.
+- `GET /openapi.json` returns the OpenAPI contract generated from Zod schemas.
 
 Example bid:
 
@@ -589,7 +615,7 @@ Content-Type: application/json
 {"amountCents":2300}
 ```
 
-## 3. Complete architecture after the progressive build
+## 3. Full architecture
 
 ```mermaid
 flowchart LR
@@ -646,23 +672,26 @@ flowchart LR
     AuctionDO -.->|auction.closed via future outbox| Settlement
 ```
 
-The Edge API / Gateway is a stateless protocol and policy layer, not the auction owner. A Cloudflare
-Worker running Hono implements it: middleware authenticates, validates, and rate limits before
-calling the named Durable Object binding. This is why an `auctionStub` helper is unnecessary:
-`env.AUCTIONS.getByName(id)` is already the typed Cloudflare RPC reference. Importing the `Auction`
-class would call a local class and bypass the remote object's identity, storage, and serialization
-boundary.
+The Edge API / Gateway handles public requests but does not own auction state. A Cloudflare Worker
+running Hono performs this role. Its middleware authenticates, validates, and rate limits a request
+before calling the named Durable Object binding.
+
+An `auctionStub` helper would add no value. `env.AUCTIONS.getByName(id)` already returns Cloudflare's
+typed RPC reference to the remote object. Importing the `Auction` class would call local code. That
+would skip the remote object's identity, storage, and ordered execution boundary.
 
 ## 4. Critical flows
 
 ### Create and start
 
-1. The Edge API / Gateway verifies JWT issuer, audience, signature, expiry, subject, and role before object lookup.
-2. Zod validates the auction ID, headers, and strict JSON body.
-3. The named `Auction` object applies any pending numbered SQLite migrations.
-4. Create inserts the draft and `auction.created` event atomically.
-5. Start checks ownership/idempotency, moves `DRAFT → LIVE`, writes its full replay response, and installs the alarm in the same storage transaction.
-6. Only after commit does the authority enqueue fanout publication with `waitUntil`.
+1. Before looking up an object, the gateway verifies the JWT issuer, audience, signature, expiry,
+   subject, and role.
+2. Zod checks the auction ID, headers, and strict JSON body.
+3. The named `Auction` object runs any pending numbered SQLite migrations.
+4. One transaction inserts the draft and its `auction.created` event.
+5. Start checks ownership and idempotency. The same transaction moves `DRAFT → LIVE`, saves the
+   complete response for later retries, and sets the alarm.
+6. After the transaction commits, the authority uses `waitUntil` to publish to fanout objects.
 
 ### Place a bid
 
@@ -694,13 +723,18 @@ sequenceDiagram
     W-->>C: Accepted or replayed response
 ```
 
-1. Rate limiting and validation occur before the authority lookup.
-2. The object checks the `(actor, idempotency key)` record first. If its fingerprint matches, it returns the stored original response—even if later bids occurred or the deadline passed.
-3. Otherwise, inside one synchronous storage transaction it checks state/time, calculates the minimum, inserts the bid, updates auction state, records the typed event, stores the idempotency record, and changes the alarm if extended.
-4. Database triggers independently reject impossible price/state/sequence combinations.
-5. After commit, the authority publishes the resulting event/snapshot to four fanout shards.
+1. Rate limiting and validation happen before the authority lookup.
+2. The object first looks for the `(actor, idempotency key)` record. If the fingerprint matches, it
+   returns the original saved response, even if later bids happened or the deadline passed.
+3. For a new request, one synchronous storage transaction checks state and time, calculates the
+   minimum, inserts the bid, updates the auction, records the typed event, saves the idempotency
+   record, and changes the alarm if the deadline moved.
+4. Database triggers also reject impossible combinations of price, state, or sequence.
+5. After the commit, the authority publishes the event and snapshot to four fanout shards.
 
-Two equal simultaneous bids reach the same authority. One advances state; the next observes the higher minimum and fails. A distributed lock is unnecessary.
+Two equal bids can arrive at the same time. They still reach the same authority. One updates the
+state first. The next sees the higher minimum and fails. The system does not need a distributed
+lock.
 
 ### Close
 
@@ -721,9 +755,12 @@ stateDiagram-v2
     end note
 ```
 
-The persisted server deadline is authoritative. The alarm transitions `LIVE → CLOSED` once, freezes the current leader as winner, records `auction.closed`, and clears the alarm transactionally. If alarm delivery repeats, closed state makes it harmless. A read or bid also performs close-if-due, covering delayed alarm execution.
+The saved server deadline is official. The close transaction moves `LIVE → CLOSED`, makes the
+current leader the winner, records `auction.closed`, and clears the alarm. A repeated alarm is safe
+because the auction is already closed. A read or bid also closes an overdue auction if the alarm is
+late.
 
-### Realtime reconnect
+### Reconnect to live updates
 
 ```mermaid
 sequenceDiagram
@@ -748,47 +785,67 @@ sequenceDiagram
     end
 ```
 
-Viewer identity hashes to one of four fanout objects. The shard accepts the socket as not-ready, asks the authority for a snapshot and bounded events after the requested cursor, then replays any messages that arrived during bootstrap before marking the socket ready. This avoids the snapshot/subscribe gap.
+The viewer's identity maps to one of four fanout objects. The shard first marks the socket as not
+ready. It asks the authority for a snapshot and a limited set of events after the requested cursor.
+It then replays messages that arrived during setup and marks the socket ready. This closes the gap
+between the snapshot and subscription.
 
-Every message has the authority's sequence. Clients persist the latest cursor, ignore duplicates, reconnect with `afterSequence`, and use `/history` when the snapshot says `resyncRequired`. Fanout delivery is therefore at least once; cooperating clients get effectively-once state transitions through durable idempotency.
+Every message includes the authority's sequence number. Clients save the latest cursor, ignore
+duplicates, and reconnect with `afterSequence`. They use `/history` when the snapshot sets
+`resyncRequired`. Fanout may deliver a message more than once. Durable idempotency makes an action
+change state effectively once when a client reuses its key.
 
-## 5. Failure analysis
+## 5. What happens when something fails
 
-| Failure                            | Behavior                                                             |
-| ---------------------------------- | -------------------------------------------------------------------- |
-| Accepted response is lost          | Retry same key; receive the exact original snapshot and event.       |
-| Same key has different input       | Fingerprint mismatch returns `IDEMPOTENCY_KEY_REUSED`.               |
-| Equal bids race                    | One transaction commits first; the next evaluates updated state.     |
-| Authority evicts/restarts          | SQLite, alarm, and idempotency records restore correctness state.    |
-| Alarm retries or is delayed        | Close is idempotent; reads/bids also close overdue state.            |
-| Fanout publish fails               | Bid remains committed; client snapshot/history repairs delivery.     |
-| Socket drops during bootstrap      | Reconnect cursor repeats safely and closes the subscribe gap.        |
-| One fanout shard fills             | It returns 503; other shards and bid acceptance remain independent.  |
-| Payment provider fails             | Auction remains closed; a future Workflow retries settlement.        |
-| Authority partition is unavailable | Reject/time out that auction rather than create conflicting winners. |
+| Failure                         | What the system does                                                     |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| A successful response is lost   | Retry the same key and receive the exact original snapshot and event.    |
+| The same key has different data | Return `IDEMPOTENCY_KEY_REUSED` because the fingerprint does not match.  |
+| Equal bids arrive together      | Commit one transaction first. The next one reads the new state.          |
+| The authority restarts          | Restore correct state from SQLite, the alarm, and idempotency records.   |
+| The alarm repeats or is late    | Close safely more than once. Reads and bids also close overdue auctions. |
+| Fanout publication fails        | Keep the bid. Repair delivery from a snapshot or history.                |
+| A socket drops during setup     | Reconnect with the cursor and safely repeat the setup.                   |
+| One fanout shard is full        | Return 503 there. Other shards and bid acceptance keep working.          |
+| The payment provider fails      | Keep the auction closed. A future Workflow retries settlement.           |
+| The authority is unavailable    | Reject or time out bids for that auction instead of risking two winners. |
 
-## 6. Scaling and Cloudflare tradeoffs
+## 6. Scale and Cloudflare limits
 
-Different auctions scale horizontally by ID. A single popular auction deliberately remains a single writer; bid throughput is bounded by one object's sequential work. The four delivery shards prevent viewer socket writes from dominating that correctness object, but they are a fixed working-model partition count. Production can choose shard count from audience forecasts or add an assignment directory.
+Different auction IDs use different objects and scale horizontally. One popular auction still has
+one writer on purpose, so its bid throughput is limited by the sequential work of one object. Four
+delivery shards keep viewer socket work away from the authority, but four is only the prototype's
+fixed count. A production system can choose the count from audience forecasts or use an assignment
+directory.
 
-The object's location also matters: a globally distributed audience pays network latency to one authority. Locating it near the seller or expected bidder population helps, but multi-primary bidding would require consensus and restore the complexity this design removes.
+The object's location affects latency. A global audience must send bids to one physical authority.
+Placing it near the seller or most bidders helps. Accepting bids in several primary regions would
+need consensus and bring back the complexity that this design avoids.
 
-Cloudflare compresses the architecture—compute, object identity, SQLite, alarms, and hibernating sockets share one platform—but creates vendor-specific code, migrations, limits, and operations. Rate limiting is an abuse-control hint, not a correctness primitive. Deployed staging tests remain necessary because local simulation does not prove Cloudflare routing, placement, alarms, or limit behavior.
+Cloudflare puts compute, object identity, SQLite, alarms, and hibernating sockets on one platform.
+The cost is vendor-specific code, migrations, limits, and operations. Rate limiting helps control
+abuse, but it does not protect auction correctness. Staging tests on Cloudflare are still needed
+because local tests cannot prove routing, placement, alarms, or platform limit behavior.
 
-## 7. Production decomposition
+## 7. Other production systems
 
-- D1 or another database provides searchable catalog, seller dashboards, and archive read models; it is never authoritative for bid acceptance.
-- Cloudflare Stream carries video independently. Clients overlay price and deadline from auction events because video may lag.
-- Queues plus Workflows consume a transactional outbox for payment capture, orders, notifications, analytics, and retries.
-- An external OIDC provider supplies short-lived JWTs and a remotely rotated JWKS. Application authorization may need a role/membership lookup rather than trusting a generic identity-provider claim.
-- Observability correlates `X-Request-Id`, `CF-Ray`, auction ID, event sequence, and asynchronous settlement IDs.
+- D1 or another database stores a searchable catalog, seller dashboards, and archive read models. It
+  never decides whether to accept a bid.
+- Cloudflare Stream carries video on a separate path. Clients show price and deadline from auction
+  events because the video may lag.
+- Queues and Workflows read a transactional outbox for payment capture, orders, notifications,
+  analytics, and retries.
+- An external OIDC provider supplies short-lived JWTs and a remotely rotated JWKS. The application
+  may need to look up roles or membership instead of trusting a general identity-provider claim.
+- Logs and traces connect `X-Request-Id`, `CF-Ray`, auction ID, event sequence, and asynchronous
+  settlement IDs.
 
 ## Final interview summary
 
-> The system partitions by auction ID. One Durable Object establishes the authoritative order of
-> committed transitions and owns transactional state and the deadline for that auction. Typed Hono
-> routes and Zod protect the edge; verified JWT claims establish identity. SQLite transactions,
-> database constraints, and complete idempotency responses protect bids. Alarms plus recovery paths
-> produce one durable close transition. Four hibernating fanout objects distribute ordered events
-> without entering the correctness boundary, and cursor/history recovery handles disconnects.
-> Video and settlement remain asynchronous adjacent systems.
+> The system splits work by auction ID. One Durable Object gives each auction one official order
+> for saved changes. It also owns the auction's transactional state and deadline. Hono routes and
+> Zod validate edge requests, and verified JWT claims identify the actor. SQLite transactions,
+> database rules, and saved idempotency responses protect bids. Alarms and recovery paths create
+> one durable close change. Four hibernating fanout objects send ordered events without deciding
+> auction state. Cursors and history repair gaps after a disconnect. Video and settlement run
+> separately and asynchronously.
