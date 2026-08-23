@@ -6,7 +6,11 @@ import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { authenticate, AuthenticationError, websocketProtocols } from "./auth";
-import { createDemoSession, DemoSessionConfigurationError } from "./demo-session";
+import {
+  createDemoBidderSession,
+  createDemoSession,
+  DemoSessionConfigurationError,
+} from "./demo-session";
 import {
   auctionParamsSchema,
   bidInputSchema,
@@ -258,6 +262,43 @@ app.post("/v1/demo-session", async (context) => {
 
   try {
     return json(await createDemoSession(context.env), 201);
+  } catch (error) {
+    if (error instanceof DemoSessionConfigurationError) {
+      throw new HttpError(503, "DEMO_CONFIGURATION_ERROR", error.message);
+    }
+    throw error;
+  }
+});
+
+app.post("/v1/demo-session/:auctionId/bidder", auctionParams, async (context) => {
+  if (context.env.DEMO_MODE !== "enabled") {
+    return jsonFailure(404, "ROUTE_NOT_FOUND", "Route not found");
+  }
+
+  const { auctionId } = context.req.valid("param");
+  if (!auctionId.startsWith("demo-")) {
+    return jsonFailure(404, "DEMO_AUCTION_NOT_FOUND", "Demo auction not found");
+  }
+
+  const clientAddress = context.req.header("CF-Connecting-IP") ?? "local";
+  const { success } = await context.env.COMMAND_RATE_LIMITER.limit({
+    key: `demo-bidder:${clientAddress}:${auctionId}`,
+  });
+  if (!success) {
+    return jsonFailure(429, "RATE_LIMITED", "Too many demo bidders; retry after the rate window");
+  }
+
+  const auction = await context.env.AUCTIONS.getByName(auctionId).getAuction();
+  const expectedSellerId = `demo-seller-${auctionId.slice("demo-".length)}`;
+  if (!auction.ok || auction.auction.sellerId !== expectedSellerId) {
+    return jsonFailure(404, "DEMO_AUCTION_NOT_FOUND", "Demo auction not found");
+  }
+  if (auction.auction.state !== "LIVE") {
+    return jsonFailure(409, "DEMO_AUCTION_NOT_LIVE", "This demo auction is not live");
+  }
+
+  try {
+    return json(await createDemoBidderSession(context.env, auctionId), 201);
   } catch (error) {
     if (error instanceof DemoSessionConfigurationError) {
       throw new HttpError(503, "DEMO_CONFIGURATION_ERROR", error.message);

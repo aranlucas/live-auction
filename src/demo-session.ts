@@ -1,6 +1,12 @@
 import { importJWK, SignJWT, type JWK } from "jose";
 import { z } from "zod";
-import { demoSessionSuccessSchema, type ActorRole, type DemoSessionSuccess } from "./model";
+import {
+  demoBidderSessionSuccessSchema,
+  demoSessionSuccessSchema,
+  type ActorRole,
+  type DemoBidderSessionSuccess,
+  type DemoSessionSuccess,
+} from "./model";
 
 const privateJwkSchema = z
   .object({
@@ -23,6 +29,50 @@ let cachedPrivateJwk: string | undefined;
 let cachedSigningKey: Awaited<ReturnType<typeof importJWK>> | undefined;
 
 export async function createDemoSession(env: DemoSessionEnvironment): Promise<DemoSessionSuccess> {
+  const suffix = randomSuffix();
+  const auctionId = `demo-${suffix}`;
+  const expiresAt = expirationTime();
+  const [sellerToken, bidderToken, viewerToken] = await Promise.all([
+    issueToken(env, "seller", auctionId, `demo-seller-${suffix}`, expiresAt),
+    issueToken(env, "bidder", auctionId, `demo-bidder-${suffix}`, expiresAt),
+    issueToken(env, "viewer", auctionId, `demo-viewer-${suffix}`, expiresAt),
+  ]);
+
+  return demoSessionSuccessSchema.parse({
+    ok: true,
+    auctionId,
+    expiresAt,
+    sellerToken,
+    bidderToken,
+    viewerToken,
+  });
+}
+
+export async function createDemoBidderSession(
+  env: DemoSessionEnvironment,
+  auctionId: string,
+): Promise<DemoBidderSessionSuccess> {
+  const suffix = randomSuffix();
+  const bidderId = `guest-${suffix.slice(0, 8)}`;
+  const expiresAt = expirationTime();
+  const bidderToken = await issueToken(env, "bidder", auctionId, bidderId, expiresAt);
+
+  return demoBidderSessionSuccessSchema.parse({
+    ok: true,
+    auctionId,
+    bidderId,
+    expiresAt,
+    bidderToken,
+  });
+}
+
+async function issueToken(
+  env: DemoSessionEnvironment,
+  role: ActorRole,
+  auctionId: string,
+  subject: string,
+  expiresAt: number,
+): Promise<string> {
   const privateJwk = env.DEMO_AUTH_PRIVATE_JWK;
   if (!privateJwk) {
     throw new DemoSessionConfigurationError("Demo session signing is not configured");
@@ -42,35 +92,24 @@ export async function createDemoSession(env: DemoSessionEnvironment): Promise<De
     }
     const signingKey = cachedSigningKey;
 
-    const suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 20);
-    const auctionId = `demo-${suffix}`;
-    const expiresAt = Math.floor(Date.now() / 1_000) + 15 * 60;
-    const issueToken = (role: ActorRole) =>
-      new SignJWT({ role, auctionId })
-        .setProtectedHeader({ alg: "ES256", kid: jwk.kid })
-        .setSubject(`demo-${role}-${suffix}`)
-        .setIssuer(env.AUTH_ISSUER)
-        .setAudience(env.AUTH_AUDIENCE)
-        .setIssuedAt()
-        .setExpirationTime(expiresAt)
-        .sign(signingKey);
-
-    const [sellerToken, bidderToken, viewerToken] = await Promise.all([
-      issueToken("seller"),
-      issueToken("bidder"),
-      issueToken("viewer"),
-    ]);
-
-    return demoSessionSuccessSchema.parse({
-      ok: true,
-      auctionId,
-      expiresAt,
-      sellerToken,
-      bidderToken,
-      viewerToken,
-    });
+    return new SignJWT({ role, auctionId })
+      .setProtectedHeader({ alg: "ES256", kid: jwk.kid })
+      .setSubject(subject)
+      .setIssuer(env.AUTH_ISSUER)
+      .setAudience(env.AUTH_AUDIENCE)
+      .setIssuedAt()
+      .setExpirationTime(expiresAt)
+      .sign(signingKey);
   } catch (error) {
     if (error instanceof DemoSessionConfigurationError) throw error;
     throw new DemoSessionConfigurationError("Demo session signing is not configured correctly");
   }
+}
+
+function randomSuffix(): string {
+  return crypto.randomUUID().replaceAll("-", "").slice(0, 20);
+}
+
+function expirationTime(): number {
+  return Math.floor(Date.now() / 1_000) + 15 * 60;
 }

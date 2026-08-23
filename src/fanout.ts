@@ -54,7 +54,10 @@ export class AuctionFanout extends DurableObject<Env> {
       if (message.event.sequence <= attachment.data.cursor) continue;
       try {
         socket.send(payload);
-        socket.serializeAttachment({ ready: true, cursor: message.event.sequence });
+        socket.serializeAttachment({
+          ready: true,
+          cursor: message.event.sequence,
+        });
       } catch {
         socket.close(1011, "Realtime delivery failed");
       }

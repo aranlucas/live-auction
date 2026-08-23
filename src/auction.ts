@@ -323,7 +323,10 @@ export class Auction extends DurableObject<Env> {
     const now = Date.now();
     const outcome = await this.ctx.storage.transaction(async (): Promise<CommandOutcome> => {
       const row = this.readAuctionRow();
-      if (!row) return { result: failure(404, "AUCTION_NOT_FOUND", "Auction not found") };
+      if (!row)
+        return {
+          result: failure(404, "AUCTION_NOT_FOUND", "Auction not found"),
+        };
       if (row.seller_id !== sellerId) {
         return {
           result: failure(403, "FORBIDDEN", "Only the seller can start this auction"),
@@ -377,7 +380,10 @@ export class Auction extends DurableObject<Env> {
     const fingerprint = String(amountCents);
     const outcome = await this.ctx.storage.transaction(async (): Promise<CommandOutcome> => {
       const row = this.readAuctionRow();
-      if (!row) return { result: failure(404, "AUCTION_NOT_FOUND", "Auction not found") };
+      if (!row)
+        return {
+          result: failure(404, "AUCTION_NOT_FOUND", "Auction not found"),
+        };
 
       const replay = this.replay(row, bidderId, idempotencyKey, "bid", fingerprint);
       if (replay) {
@@ -465,7 +471,10 @@ export class Auction extends DurableObject<Env> {
     const now = Date.now();
     const outcome = await this.ctx.storage.transaction(async (): Promise<CommandOutcome> => {
       const row = this.readAuctionRow();
-      if (!row) return { result: failure(404, "AUCTION_NOT_FOUND", "Auction not found") };
+      if (!row)
+        return {
+          result: failure(404, "AUCTION_NOT_FOUND", "Auction not found"),
+        };
       if (row.seller_id !== sellerId) {
         return {
           result: failure(403, "FORBIDDEN", "Only the seller can close this auction"),
@@ -475,7 +484,9 @@ export class Auction extends DurableObject<Env> {
       const replay = this.replay(row, sellerId, idempotencyKey, "close", "");
       if (replay) return { result: replay };
       if (row.state === "CLOSED") {
-        return { result: failure(409, "ALREADY_CLOSED", "The auction is already closed") };
+        return {
+          result: failure(409, "ALREADY_CLOSED", "The auction is already closed"),
+        };
       }
       if (row.state !== "LIVE" || row.ends_at === null) {
         return {
@@ -514,7 +525,10 @@ export class Auction extends DurableObject<Env> {
     const now = Date.now();
     const outcome = await this.ctx.storage.transaction(async (): Promise<CommandOutcome> => {
       const row = this.readAuctionRow();
-      if (!row) return { result: failure(404, "AUCTION_NOT_FOUND", "Auction not found") };
+      if (!row)
+        return {
+          result: failure(404, "AUCTION_NOT_FOUND", "Auction not found"),
+        };
       if (row.seller_id !== sellerId) {
         return {
           result: failure(403, "FORBIDDEN", "Only the seller can cancel this auction"),

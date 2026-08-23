@@ -10,6 +10,7 @@ import {
   RotateCcw,
   ShieldCheck,
   Sparkles,
+  UserPlus,
   XCircle,
 } from "lucide-react";
 import type { AuctionView } from "cloudflare-live-auction/model";
@@ -17,17 +18,22 @@ import { currency } from "#/lib/format";
 
 interface AuctionPanelProps {
   auction: AuctionView | null;
+  roomAuctionId?: string;
   bidderLabel: string;
   hasSellerToken: boolean;
   hasBidderToken: boolean;
   hasCredentials: boolean;
   launchingDemo: boolean;
+  joiningDemo: boolean;
   pendingAction: string | null;
+  additionalBidderUrl?: string;
   onBid: (amountCents: number) => Promise<void>;
   onCreate: () => Promise<void>;
   onCommand: (action: "start" | "close" | "cancel") => Promise<void>;
+  onJoinDemo: () => Promise<boolean>;
   onLaunchDemo: () => Promise<boolean>;
   onOpenSetup: () => void;
+  showJoinDemo: boolean;
 }
 
 function useRemainingSeconds(endsAt: number | null | undefined): number {
@@ -67,17 +73,22 @@ function CountdownRing({ seconds, total }: { seconds: number; total: number }) {
 
 export function AuctionPanel({
   auction,
+  roomAuctionId,
   bidderLabel,
   hasSellerToken,
   hasBidderToken,
   hasCredentials,
   launchingDemo,
+  joiningDemo,
   pendingAction,
+  additionalBidderUrl,
   onBid,
   onCreate,
   onCommand,
+  onJoinDemo,
   onLaunchDemo,
   onOpenSetup,
+  showJoinDemo,
 }: AuctionPanelProps) {
   const remainingSeconds = useRemainingSeconds(auction?.endsAt);
   const nextMinimum = auction?.nextMinimumBidCents ?? 10_000;
@@ -95,16 +106,35 @@ export function AuctionPanel({
   }, [form, nextMinimum]);
 
   if (!auction) {
+    const hasRoomRoute = Boolean(roomAuctionId);
     return (
       <aside className="auction-panel empty-auction" aria-label="Auction controls">
         <div className="empty-auction-mark">
-          {hasCredentials ? <Gavel size={34} /> : <Sparkles size={34} />}
+          {hasCredentials ? (
+            <Gavel size={34} />
+          ) : showJoinDemo ? (
+            <UserPlus size={34} />
+          ) : (
+            <Sparkles size={34} />
+          )}
         </div>
-        <h1>{hasCredentials ? "No auction loaded" : "Start a live demo"}</h1>
+        <h1>
+          {hasCredentials
+            ? "No auction loaded"
+            : showJoinDemo
+              ? "Join this live auction"
+              : hasRoomRoute
+                ? "Connect to this auction"
+                : "Start a live demo"}
+        </h1>
         <p>
           {hasCredentials
             ? "Create the vintage-camera demo lot in this room."
-            : "We’ll create a private test room, start the camera lot, and connect live updates. No tokens or terminal needed."}
+            : showJoinDemo
+              ? "Get a distinct guest identity for this auction and start bidding. No token setup needed."
+              : hasRoomRoute
+                ? "Open room setup to connect credentials for this auction."
+                : "We’ll create a private test room, start the camera lot, and connect live updates. No tokens or terminal needed."}
         </p>
         {hasCredentials ? (
           <button
@@ -120,6 +150,20 @@ export function AuctionPanel({
             )}
             Create demo lot
           </button>
+        ) : showJoinDemo ? (
+          <button
+            className="primary-button"
+            type="button"
+            disabled={joiningDemo}
+            onClick={() => void onJoinDemo()}
+          >
+            {joiningDemo ? <LoaderCircle className="spin" size={19} /> : <UserPlus size={19} />}
+            {joiningDemo ? "Joining auction…" : "Join as a new bidder"}
+          </button>
+        ) : hasRoomRoute ? (
+          <button className="primary-button" type="button" onClick={onOpenSetup}>
+            Connect credentials
+          </button>
         ) : (
           <button
             className="primary-button"
@@ -131,7 +175,9 @@ export function AuctionPanel({
             {launchingDemo ? "Starting your room…" : "Launch instant demo"}
           </button>
         )}
-        <span className="demo-note">Short-lived room · expires in 15 minutes</span>
+        {!hasRoomRoute || showJoinDemo ? (
+          <span className="demo-note">Short-lived identity · expires in 15 minutes</span>
+        ) : null}
         {!hasCredentials && (
           <button className="text-button" type="button" onClick={onOpenSetup}>
             Advanced setup
@@ -187,9 +233,22 @@ export function AuctionPanel({
         )}
         {isLive ? `Bid ${currency(nextMinimum, auction.currency)}` : "Bidding unavailable"}
       </button>
-      <div className="bidder-identity">
-        <ShieldCheck size={14} />
-        Bidding as {bidderLabel}
+      <div className="participant-actions">
+        <div className="bidder-identity">
+          <ShieldCheck size={14} />
+          Bidding as {bidderLabel}
+        </div>
+        {additionalBidderUrl ? (
+          <a
+            className="open-bidder-link"
+            href={additionalBidderUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <UserPlus size={14} />
+            Open another bidder
+          </a>
+        ) : null}
       </div>
 
       <form

@@ -7,6 +7,7 @@ import {
   commandHeadersSchema,
   commandSuccessSchema,
   createAuctionInputSchema,
+  demoBidderSessionSuccessSchema,
   demoSessionSuccessSchema,
   healthSchema,
   historyQuerySchema,
@@ -28,7 +29,8 @@ function response(
     | typeof historySuccessSchema
     | typeof operationFailureSchema
     | typeof healthSchema
-    | typeof demoSessionSuccessSchema,
+    | typeof demoSessionSuccessSchema
+    | typeof demoBidderSessionSuccessSchema,
   description = "Response",
 ) {
   return { description, content: jsonContent(schema) };
@@ -66,6 +68,22 @@ export function registerOpenApi<Environment extends HonoEnvironment>(
 
   app.openAPIRegistry.registerPath({
     method: "post",
+    path: "/v1/demo-session/{auctionId}/bidder",
+    summary: "Join a live demo as a new bidder",
+    description:
+      "Available only in demo-enabled environments. Returns a distinct 15-minute bidder token scoped to an existing live demo auction.",
+    request: { params: auctionParamsSchema },
+    responses: {
+      201: response(demoBidderSessionSuccessSchema, "Demo bidder created"),
+      404: response(operationFailureSchema, "Live demo auction not found or demos disabled"),
+      409: response(operationFailureSchema, "Demo auction is not live"),
+      429: response(operationFailureSchema, "Rate limit exceeded"),
+      503: response(operationFailureSchema, "Demo signing is unavailable"),
+    },
+  });
+
+  app.openAPIRegistry.registerPath({
+    method: "post",
     path: "/v1/demo-session",
     summary: "Create a short-lived demo room",
     description:
@@ -85,7 +103,9 @@ export function registerOpenApi<Environment extends HonoEnvironment>(
     security: [{ bearerAuth: [] }],
     request: {
       params: auctionParamsSchema,
-      body: { content: { "application/json": { schema: createAuctionInputSchema } } },
+      body: {
+        content: { "application/json": { schema: createAuctionInputSchema } },
+      },
     },
     responses: {
       200: response(commandSuccessSchema, "Existing identical auction"),

@@ -15,7 +15,12 @@ pnpm --filter gavel-live-web dev
 
 Open `http://localhost:3000` and select **Launch instant demo**. The app creates a scoped,
 15-minute staging room, creates the camera lot, starts it, and connects the event stream. You can
-bid immediately.
+bid immediately. The browser moves to the room's canonical `/auctions/{auctionId}` URL.
+
+Select **Open another bidder** to open that auction in a new tab. A staging-only join endpoint
+creates a different 15-minute bidder identity scoped to the live demo, and the new tab returns to
+the same canonical auction URL. Repeat this for as many independent bidder tabs as you need; each
+tab keeps its own credentials in `sessionStorage`, while WebSockets keep every tab synchronized.
 
 For a custom API or identity provider, open **Room setup → Advanced setup**. Generate short-lived
 test identities in another terminal:

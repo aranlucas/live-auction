@@ -5,6 +5,7 @@ import { performance } from "node:perf_hooks";
 import { z } from "zod";
 import {
   commandResultSchema,
+  demoBidderSessionResultSchema,
   demoSessionResultSchema,
   healthSchema,
   historyResultSchema,
@@ -262,7 +263,9 @@ async function main(): Promise<void> {
     "health endpoint",
     async () => {
       const requestId = crypto.randomUUID();
-      const response = await api("/health", { headers: { "X-Request-Id": requestId } });
+      const response = await api("/health", {
+        headers: { "X-Request-Id": requestId },
+      });
       assert.equal(response.status, 200);
       assert.equal(response.headers.get("X-Request-Id"), requestId);
       return healthSchema.parse(await response.json());
@@ -276,7 +279,10 @@ async function main(): Promise<void> {
       const response = await api("/openapi.json");
       assert.equal(response.status, 200);
       return z
-        .object({ openapi: z.literal("3.1.0"), paths: z.record(z.string(), z.unknown()) })
+        .object({
+          openapi: z.literal("3.1.0"),
+          paths: z.record(z.string(), z.unknown()),
+        })
         .parse(await response.json());
     },
     (document) => `${Object.keys(document.paths).length} documented paths`,
@@ -330,6 +336,32 @@ async function main(): Promise<void> {
         200,
       );
       assert.equal(acceptedBid.ok, true);
+      const joinedBidders = await Promise.all(
+        [0, 1].map(async () => {
+          const response = await api(`/v1/demo-session/${session.auctionId}/bidder`, {
+            method: "POST",
+          });
+          const result = await parseResponse(response, demoBidderSessionResultSchema, 201);
+          assert.equal(result.ok, true);
+          return result;
+        }),
+      );
+      assert.notEqual(joinedBidders[0].bidderId, joinedBidders[1].bidderId);
+      for (const [index, bidder] of joinedBidders.entries()) {
+        await parseResponse(
+          await api(`/v1/auctions/${session.auctionId}/bids`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${bidder.bidderToken}`,
+              "Content-Type": "application/json",
+              "Idempotency-Key": `joined-demo-bid-${index}-${runId}`,
+            },
+            body: JSON.stringify({ amountCents: 1_100 + index * 100 }),
+          }),
+          commandResultSchema,
+          200,
+        );
+      }
       const mismatch = await parseResponse(
         await api(`/v1/auctions/demo-mismatch-${runId}`, {
           headers: { Authorization: `Bearer ${session.viewerToken}` },
@@ -342,7 +374,7 @@ async function main(): Promise<void> {
     },
     (result) =>
       result.ok
-        ? `${result.auctionId}: created, started, bid, and scope-isolated`
+        ? `${result.auctionId}: created, started, three distinct bidders, and scope-isolated`
         : "disabled outside staging",
   );
 

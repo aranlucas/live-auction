@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   commandResultSchema,
   createAuctionInputSchema,
+  demoBidderSessionResultSchema,
   demoSessionResultSchema,
   historyResultSchema,
   operationFailureSchema,
@@ -44,7 +45,7 @@ export const defaultAuctionInput: CreateAuctionInput = createAuctionInputSchema.
   currency: "USD",
   startPriceCents: 10_000,
   minIncrementCents: 1_000,
-  durationSeconds: 120,
+  durationSeconds: 300,
   antiSnipeWindowSeconds: 10,
   extensionSeconds: 10,
 });
@@ -72,7 +73,9 @@ function endpoint(config: TestRoomConfig, path = ""): URL {
 }
 
 export async function requestDemoSession(apiBaseUrl: string): Promise<TestRoomConfig> {
-  const response = await fetch(apiEndpoint(apiBaseUrl, "/v1/demo-session"), { method: "POST" });
+  const response = await fetch(apiEndpoint(apiBaseUrl, "/v1/demo-session"), {
+    method: "POST",
+  });
   const result = demoSessionResultSchema.parse(await response.json());
   if (!result.ok) {
     throw new AuctionApiError(result.error.status, result.error.code, result.error.message);
@@ -83,6 +86,27 @@ export async function requestDemoSession(apiBaseUrl: string): Promise<TestRoomCo
     sellerToken: result.sellerToken,
     bidderToken: result.bidderToken,
     viewerToken: result.viewerToken,
+  };
+}
+
+export async function requestDemoBidderSession(
+  apiBaseUrl: string,
+  auctionId: string,
+): Promise<TestRoomConfig> {
+  const response = await fetch(
+    apiEndpoint(apiBaseUrl, `/v1/demo-session/${encodeURIComponent(auctionId)}/bidder`),
+    { method: "POST" },
+  );
+  const result = demoBidderSessionResultSchema.parse(await response.json());
+  if (!result.ok) {
+    throw new AuctionApiError(result.error.status, result.error.code, result.error.message);
+  }
+  return {
+    apiBaseUrl,
+    auctionId: result.auctionId,
+    sellerToken: "",
+    bidderToken: result.bidderToken,
+    viewerToken: "",
   };
 }
 

@@ -4,7 +4,11 @@
 
 > I’ll design an English ascending live-commerce auction. Viewers see price changes, authenticated bidders submit bids, and the system selects at most one winner. I’ll focus on ordering, deadlines, durability, retry safety, and realtime delivery; video and payment remain adjacent systems.
 >
-> Every transition for one auction needs one authoritative total order. There is no need for global ordering, so I’ll partition by auction ID and make one Durable Object the authority for each auction. Realtime sockets can scale on separate fanout objects because they never decide state.
+> Every transition for one auction needs one authoritative total order. There is no need for global ordering, so I’ll partition by auction ID and give each auction one logical authority. This project implements that authority with a Durable Object. Realtime sockets can scale separately because they never decide state.
+
+For an interview, keep the first sentence vendor-neutral: use **one logical auction authority per
+auction ID**. Then say that this working project implements that authority with a Cloudflare Durable
+Object. This demonstrates a concrete design without assuming the interviewer wants Cloudflare.
 
 ## 45-minute delivery plan
 
@@ -17,6 +21,147 @@
 | 25:00-38:00 | Contention, deadlines, reconnects, fanout, and failures    |
 | 38:00-43:00 | Hot-auction scale, multi-region latency, and decomposition |
 | 43:00-45:00 | Tradeoffs and summary                                      |
+
+## What Whatnot interview evidence actually supports
+
+This is a Whatnot-relevant practice problem, not a verified “official Whatnot auction question.”
+Whatnot does not publish a public system-design rubric or fixed question bank. Public candidate
+reports are sparse and can vary by role, level, team, location, and year.
+
+What the available evidence does support:
+
+- One successful candidate reported back-to-back 45-minute product-design and system-design rounds,
+  with questions connected to their experience using the app and ideas for improving it
+  ([Taro candidate report](https://www.jointaro.com/interviews/companies/whatnot/experiences/software-engineer-seattle-wa-june-1-2023-accepted-offer-positive-9d607b94/)).
+- A senior candidate separately reported “improve the Whatnot app” for product design and “design a
+  notification system” for system design
+  ([Glassdoor candidate report](https://www.glassdoor.com/Interview/Product-design-interview-How-would-you-improve-whatnot-app-and-System-design-interview-design-a-notification-system-QTN_5512845.htm)).
+- Whatnot’s published principles emphasize using the product, understanding the customer and the
+  reason for a decision, prioritizing impact, moving quickly, and starting small rather than planning
+  for every possible risk
+  ([Whatnot careers](https://careers.whatnot.com)).
+
+The preparation implication is:
+
+1. Practice a reusable system-design delivery method; do not memorize only this auction design.
+2. Keep product sense separate from system design, but connect technical priorities to buyer and
+   seller outcomes.
+3. Start with the smallest correct system, then add durability, realtime scale, and adjacent systems
+   as the interviewer asks. The progressive Mermaid diagrams below deliberately follow that shape.
+4. Explain tradeoffs before naming products. “Durable Object” is this project’s implementation of a
+   single-writer entity, not the only acceptable interview answer.
+
+If the interviewer does ask about a live auction, current Whatnot product behavior gives useful
+clarifying branches:
+
+- Sellers choose a standard timer, where late bids add time, or a sudden-death timer with a hard
+  ending.
+- Buyers can place the next increment, submit an exact custom bid, set a private max bid, or pre-bid.
+- Bids are binding, and the winner’s saved payment method is charged when the timer ends.
+
+Those are current product behaviors, not assumptions to silently bake into the first design
+([Whatnot bidding guide](https://help.whatnot.com/hc/en-us/articles/14932924544141-Bid-on-an-item-during-a-show)).
+Ask which subset is in scope. This guide proceeds with a simple standard ascending auction, then
+calls out max bidding as an extension.
+
+Whatnot’s public engineering writing also suggests the right scale questions without requiring you
+to copy its internal stack. The company has described a Python main backend for slower-moving data
+and an Elixir Live Service using Phoenix channels and per-auction processes for fast auctions and
+chat. More recently, it reported 583,000 peak viewers in one show and emphasized admission control,
+bursty load tests, load shedding, and graceful degradation
+([Whatnot Live Service architecture](https://medium.com/whatnot-engineering/keeping-up-with-the-fans-scaling-for-big-events-at-whatnot-with-elixir-and-phoenix-1916eba58a76),
+[2026 large-event report](https://medium.com/whatnot-engineering/scaling-whatnot-behind-the-largest-live-shopping-stream-in-us-history-040a458f538c)).
+Therefore, explicitly ask whether you are designing a normal hot auction or a rare tentpole event;
+the fanout and overload plan changes by orders of magnitude, while bid correctness does not.
+
+## Commands, actors, and Whatnot’s published model
+
+A command is **not** an actor. A command is a message asking an actor-like authority to attempt a
+state change.
+
+```mermaid
+flowchart LR
+    Seller[Seller]
+    Bidder[Bidder]
+    Auction["Auction actor / authority — owns state and ordering"]
+    Events["Facts emitted after commit — AuctionStarted · BidAccepted · AuctionClosed"]
+    Subscribers[Bidder and viewer subscribers]
+
+    Seller -->|"command: StartAuction"| Auction
+    Bidder -->|"command: PlaceBid"| Auction
+    Auction -->|reply: accepted or rejected| Seller
+    Auction -->|reply: accepted or rejected| Bidder
+    Auction --> Events --> Subscribers
+```
+
+Use the terms this way:
+
+| Term    | Meaning                                                | Auction example                        |
+| ------- | ------------------------------------------------------ | -------------------------------------- |
+| Actor   | Stateful owner that processes messages in order        | The per-auction Durable Object         |
+| Command | Request to attempt a state change; it may be rejected  | `PlaceBid`, `StartAuction`, `Close`    |
+| Query   | Request that reads state without changing it           | `GetAuction`, `GetHistory`             |
+| Event   | Past-tense fact emitted only after a successful commit | `BidAccepted`, `AuctionClosed`         |
+| Receipt | Stored reply used to make a command retry safe         | Exact response for one idempotency key |
+
+The Cloudflare model and Whatnot’s published architecture are conceptually close:
+
+| Concern          | This Cloudflare project                                   | Whatnot’s published architecture                                            |
+| ---------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Stateful owner   | One named Durable Object per auction                      | Auctions modeled as Elixir GenServer processes                              |
+| Incoming command | Hono HTTP route calls a typed Durable Object RPC method   | Client sends a Phoenix channel `place bid` request event                    |
+| Immediate reply  | Typed HTTP accepted/rejected response                     | Live Service replies `ok` or rejects the request                            |
+| State broadcast  | Committed event goes to separate WebSocket fanout objects | Live Service broadcasts a bid event through Phoenix channels/PubSub         |
+| Placement/scale  | Cloudflare manages object identity and placement          | Kubernetes, Horde, Phoenix PubSub, and the Elixir process model             |
+| Durable state    | Colocated SQLite, alarm, events, and idempotency receipts | Not fully described in the public posts; do not invent this in an interview |
+
+The Whatnot comparison is based on its published Live Service and secret-max-bid articles
+([Elixir/Phoenix architecture](https://medium.com/whatnot-engineering/keeping-up-with-the-fans-scaling-for-big-events-at-whatnot-with-elixir-and-phoenix-1916eba58a76),
+[bid request and broadcast flow](https://medium.com/whatnot-engineering/peeking-behind-the-curtain-of-secret-max-bid-34abed6cbe70)).
+Elixir’s `GenServer.call` and `GenServer.cast` are messages handled by one stateful process; calls
+wait for a reply while casts do not
+([Elixir GenServer documentation](https://hexdocs.pm/elixir/1.18.1/genservers.html)). Cloudflare
+exposes public Durable Object methods as RPC calls on a named stub
+([Cloudflare RPC documentation](https://developers.cloudflare.com/durable-objects/best-practices/create-durable-object-stubs-and-send-requests/)).
+
+### HTTP commands versus Whatnot’s WebSocket commands
+
+Whatnot has publicly described sending a `place bid` request and its immediate reply over a Phoenix
+channel, then broadcasting the accepted bid on that channel. This project sends seller and bidder
+commands over HTTP and reserves WebSockets for committed events. Neither transport changes the
+actor model:
+
+- HTTP makes authentication, request limits, idempotency headers, observability, and ordinary retry
+  semantics easy to explain.
+- A WebSocket command can save repeated connection setup and keep request, reply, and broadcast on
+  one low-latency channel, but reconnects and request correlation must be designed explicitly.
+- In either design, the command needs verified identity and a unique request/idempotency ID. Only
+  the auction authority can acknowledge acceptance. A broadcast is an event, not proof that the
+  original command was safely processed.
+
+For a Whatnot interview, mention the published Phoenix approach if it is useful context, but do not
+rewrite your whole design around it unless the interviewer requires WebSocket commands.
+
+### What this working model does and does not match
+
+It exercises the transferable hard parts: one ordered auction owner, simultaneous-bid
+serialization, authoritative deadlines, idempotent retries, realtime broadcast isolation, and
+cursor-based recovery. It is not a replica of Whatnot:
+
+- It implements simple ascending bids, not private max bids, pre-bids, or proxy auto-bidding.
+- It uses a fixed increment, while Whatnot’s current product can vary increments with price.
+- It gives every subscriber the same event view; Whatnot has described subscriber-specific payloads
+  to keep a bidder’s private max secret.
+- Four fixed fanout shards at 2,000 sockets each are a working-model capacity, not a design for a
+  583,000-viewer tentpole show. That scale needs dynamic shard assignment, admission control,
+  thundering-herd tests, and intentional load shedding.
+- Video, payment capture, inventory, moderation, and fraud controls remain adjacent systems here.
+
+So the interview sentence is:
+
+> “The auction authority is actor-like. Seller actions and bids are commands sent to it; accepted
+> commands produce durable events. The idempotency receipt is only the stored reply for retry
+> safety—it is neither the command nor the actor.”
 
 ## How the interview might actually go
 
@@ -67,18 +212,58 @@ This sentence should drive the rest of the interview.
 
 Write these on the board without designing every column:
 
-```text
-Auction       id, seller, state, price, leader, deadline, version
-Bid           id, auction, bidder, amount, acceptedAt, sequence
-AuctionEvent  auction, sequence, type, actor, payload, occurredAt
-CommandResult actor, idempotencyKey, fingerprint, originalResponse
+```mermaid
+classDiagram
+    class Auction {
+        +string id
+        +string sellerId
+        +AuctionState state
+        +int currentPriceCents
+        +string leaderId
+        +timestamp deadline
+        +int version
+    }
+    class Bid {
+        +string id
+        +string bidderId
+        +int amountCents
+        +timestamp acceptedAt
+        +int sequence
+    }
+    class AuctionEvent {
+        +int sequence
+        +EventType type
+        +string actorId
+        +EventPayload payload
+        +timestamp occurredAt
+    }
+    class CommandReceipt {
+        +string actorId
+        +string idempotencyKey
+        +string fingerprint
+        +json originalResponse
+    }
+
+    Auction "1" *-- "many" Bid
+    Auction "1" *-- "many" AuctionEvent
+    Auction "1" *-- "many" CommandReceipt
 ```
 
-Explain why `CommandResult` is a first-class entity:
+`CommandReceipt` is the plain-language name for what the implementation calls a stored
+`CommandResult`. It is not another user action and it is not the current auction state. It is a
+durable retry receipt:
+
+- `actorId + idempotencyKey` identifies one seller action or bid attempt.
+- `fingerprint` records what that request meant, such as “bid 10,000 cents.”
+- `originalResponse` is the exact response produced when that request first committed.
 
 > A client can lose a successful response and retry after other bids have occurred. Returning the
-> current auction would not be an exact retry. I persist the complete original result under the
-> actor and idempotency key.
+> current auction would not be an exact retry. I persist a receipt containing the complete original
+> response under the actor and idempotency key.
+
+For example, bidder A’s `$100` bid commits but its HTTP response is lost. Bidder B then raises the
+price to `$110`. When bidder A retries the same key, the receipt returns A’s original `$100`
+acceptance with `replayed: true`; it does not pretend A originally bid at the newer price.
 
 Do not add users, products, chat, payments, shipments, and video segments to the main auction
 transaction. They can be referenced by ID or placed beside the core system later.
@@ -109,16 +294,123 @@ Call out three contract decisions:
 If asked why WebSockets rather than polling, say that polling is still a recovery and fallback
 interface, while WebSockets reduce state-change latency and repeated reads for live viewers.
 
+Keep seller and bidder authority separate:
+
+| Actor  | Allowed mutations                                              |
+| ------ | -------------------------------------------------------------- |
+| Seller | Create, start, close after the deadline, or cancel its auction |
+| Bidder | Place an idempotent bid on a live auction                      |
+| Viewer | Read state/history and subscribe to realtime events            |
+
+A seller token cannot bid, and a bidder token cannot start, close, or cancel an auction.
+
 ### 12:00-25:00 — Draw the smallest complete architecture
 
-Build the diagram from left to right in this order:
+Build the design in layers. Each layer answers a requirement introduced earlier and preserves the
+same correctness boundary. Do not draw the final platform all at once.
 
-1. Clients and the separate video path.
-2. A stateless Worker for authentication, validation, rate limiting, and routing.
-3. One authoritative Durable Object selected by auction ID.
-4. Its transactional SQLite state and deadline alarm.
-5. Realtime fanout objects that receive committed events.
-6. An asynchronous settlement path after close.
+#### Complexity 1 — One correct command path
+
+Start with only the boxes needed to accept a bid correctly:
+
+```mermaid
+flowchart LR
+    Seller[Seller]
+    Bidder[Bidder]
+    Worker["Worker — authenticate · validate · route"]
+    Auction["Auction Durable Object — one authority per auction ID"]
+
+    Seller -->|"create · start · close · cancel"| Worker
+    Bidder -->|place bid| Worker
+    Worker -->|"getByName(auctionId)"| Auction
+    Auction -->|accepted or rejected| Worker
+    Worker --> Seller
+    Worker --> Bidder
+```
+
+Say: “Every command for auction A reaches the same logical owner. Different auction IDs resolve to
+different owners and scale independently.” At this point you have established ordering without
+discussing storage, sockets, video, or payments.
+
+#### Complexity 2 — Make correctness durable
+
+Now open the authority box and add only the state needed for retries and deadlines:
+
+```mermaid
+flowchart LR
+    Worker[Worker]
+
+    subgraph Boundary[Per-auction correctness boundary]
+        Auction["Auction Durable Object — sequential state machine"]
+        SQLite["SQLite transaction — auction · bids · events · retry receipts"]
+        Alarm["Durable alarm — authoritative deadline"]
+        Auction --- SQLite
+        Auction --- Alarm
+    end
+
+    Worker -->|validated command| Auction
+    Auction -->|exact stored response| Worker
+```
+
+This layer explains durable idempotency, anti-sniping, recovery after eviction, and at-most-one
+winner. The bid, price, event, retry result, and any deadline change commit together.
+
+#### Complexity 3 — Add realtime delivery without weakening correctness
+
+Only after the write path is correct, split bulk WebSocket delivery away from the authority:
+
+```mermaid
+flowchart LR
+    Bidder[Bidder]
+    Viewer[Viewer]
+    Worker[Worker]
+    Auction["Auction authority — decides state"]
+
+    subgraph Fanout[Realtime delivery]
+        Shard["Fanout shard — retained events"]
+        Sockets[Hibernating WebSockets]
+        Shard --> Sockets
+    end
+
+    Bidder -->|bid command| Worker --> Auction
+    Auction -->|ordered event after commit| Shard
+    Sockets -->|snapshot · event · cursor| Bidder
+    Sockets -->|snapshot · event · cursor| Viewer
+    Bidder -.->|"reconnect afterSequence=N"| Shard
+    Viewer -.->|"reconnect afterSequence=N"| Shard
+    Bidder -.->|"large gap: GET /history"| Worker
+    Viewer -.->|"large gap: GET /history"| Worker
+```
+
+The authority still makes every auction decision. Fanout can lag, duplicate, disconnect, or scale
+to more shards without changing the winner.
+
+#### Complexity 4 — Add adjacent product systems
+
+Finish with the systems intentionally kept outside the bid transaction:
+
+```mermaid
+flowchart LR
+    Seller[Seller]
+    Bidder[Bidder]
+    Viewer[Viewer]
+    Stream[Cloudflare Stream]
+    CDN[CDN]
+    Auction[Auction authority]
+    Outbox[Transactional outbox]
+    Workflow[Queue / Workflow]
+    Settlement[Payment · order · notification]
+
+    Seller -->|video| Stream --> CDN --> Viewer
+    Seller -->|"create · start · close · cancel"| Auction
+    Bidder -->|place bid| Auction
+    Auction -->|realtime state| Viewer
+    Auction -->|realtime state| Bidder
+    Auction -.->|auction.closed| Outbox --> Workflow --> Settlement
+```
+
+Video may lag and settlement may retry, but neither participates in choosing the winning bid. The
+complete reference diagram later in this guide is the combination of these four layers.
 
 Say this while drawing the authority:
 
@@ -132,8 +424,9 @@ Then distinguish decision making from delivery:
 > The authority accepts or rejects bids. Fanout objects only distribute the result. If fanout is
 > slow or unavailable, it must not change the winning bid.
 
-At this point the design is complete enough to work. Ask the interviewer where they want to go
-deeper, while offering the most important choices:
+After complexity 2, the design is already complete enough to be correct. Complexity 3 makes it
+usable for a live audience, and complexity 4 makes the product boundary explicit. Ask the
+interviewer where they want to go deeper while offering the most important choices:
 
 > The highest-risk areas are simultaneous bids, exact retries, closing at the deadline, and the
 > snapshot-to-WebSocket race. I can start with bid contention and closing unless you prefer fanout
@@ -145,26 +438,51 @@ deeper, while offering the most important choices:
 
 Draw two requests entering the same authority:
 
-```text
-bidder A: $100 ─┐
-                ├─> Auction(camera-001) ─> A commits, minimum becomes $110
-bidder B: $100 ─┘                         B observes $110 and is rejected
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Bidder A
+    participant B as Bidder B
+    participant DO as Auction(camera-001)
+
+    par Equal bids arrive
+        A->>DO: Bid USD 100
+    and
+        B->>DO: Bid USD 100
+    end
+    DO->>DO: Serialize commands
+    DO->>DO: Commit A, next minimum = USD 110
+    DO-->>A: Accepted
+    DO->>DO: Evaluate B against USD 110
+    DO-->>B: Rejected: BID_TOO_LOW
 ```
 
-The important answer is not merely “single threaded.” The accepted bid, price update, event,
-idempotency result, and any deadline extension must commit in one storage transaction. No external
-cache is allowed to decide the current minimum.
+The important answer is not merely “single threaded.” The accepted bid, price update, event,idempotency result, and any deadline extension must commit in one storage transaction. No external cache is allowed to decide the current minimum.
 
 #### Deep dive 2: the response is lost
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Bidder A
+    participant B as Bidder B
+    participant DO as Auction authority
+    participant R as Retry receipts in SQLite
 
-Walk through this failure precisely:
+    A->>DO: Bid USD 100, key=A-7
+    DO->>R: Store fingerprint + exact USD 100 success
+    DO--xA: HTTP response is lost
+    B->>DO: Bid USD 110, key=B-3
+    DO->>R: Store B's exact USD 110 success
+    DO-->>B: Accepted at USD 110
+    A->>DO: Retry bid USD 100, key=A-7
+    DO->>R: Look up A-7
+    R-->>DO: Original USD 100 success
+    DO-->>A: Same USD 100 success, replayed=true
+```
 
-1. The authority commits bidder A’s $100 bid and stores the full response.
-2. The network loses the HTTP response.
-3. Bidder B later raises the price to $110.
-4. Bidder A retries the same key and body.
-5. The authority returns A’s original $100 success with `replayed: true`, not the newer $110 state.
-6. Reusing the key with a different amount returns a conflict.
+The retry receipt is why A does not receive the current `$110` state as if it were A’s original
+result. Reusing `A-7` with a different amount does not match the stored fingerprint and returns
+`IDEMPOTENCY_KEY_REUSED`.
 
 This is a strong opportunity to correct “exactly once” language:
 
@@ -235,15 +553,18 @@ Then stop. Leave the final minute for the interviewer rather than adding unrelat
 
 If you tend to lose time while drawing, use this sequence:
 
-```text
-1. Write invariants: per-auction total order; at most one winner.
-2. Write six APIs and the Idempotency-Key requirement.
-3. Draw clients → Worker → Auction authority.
-4. Put SQLite + alarm inside the authority.
-5. Draw committed events → fanout shards → WebSockets.
-6. Draw video as a separate top lane.
-7. Draw closed event → queue/workflow → payment/order.
-8. Annotate sequence numbers and reconnect cursor.
+```mermaid
+flowchart TD
+    A["1. Invariants — per-auction order; at most one winner"]
+    B["2. API contracts — Idempotency-Key on mutations"]
+    C["3. Clients → Worker → Auction authority"]
+    D["4. SQLite + alarm inside authority"]
+    E["5. Committed events → fanout → WebSockets"]
+    F["6. Video on a separate lane"]
+    G["7. Closed event → workflow → settlement"]
+    H["8. Sequence numbers + reconnect cursor"]
+
+    A --> B --> C --> D --> E --> F --> G --> H
 ```
 
 Avoid beginning with every Cloudflare product. Each box should answer a requirement or a failure
@@ -347,7 +668,7 @@ The principal invariants are:
 - `Auction`: seller, prices, state, leader, winner, bid count, configuration, timestamps, and version.
 - `Bid`: server-generated ID, bidder, amount, accepted timestamp, and sequence.
 - `AuctionEvent`: discriminated type and payload, actor, time, and authoritative sequence.
-- `CommandResult`: actor, idempotency key, request fingerprint, event sequence, and complete response JSON.
+- `CommandReceipt`: the durable retry receipt called `CommandResult` in the implementation; it stores actor, idempotency key, request fingerprint, event sequence, and the exact original response JSON.
 - `FanoutMessage`: resulting snapshot, event, and cursor retained on one delivery shard.
 
 Important API choices:
@@ -370,41 +691,57 @@ Content-Type: application/json
 {"amountCents":2300}
 ```
 
-## 3. Working architecture
+## 3. Complete architecture after the progressive build
 
-```text
-seller video ──> Cloudflare Stream ──> CDN ────────────────> viewers
+```mermaid
+flowchart LR
+    Seller[Seller]
+    Bidders[Bidders]
+    Viewers[Viewers]
 
-seller / bidders / viewers
-          │ HTTPS + WebSocket
-          ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Cloudflare Worker                                            │
-│ Hono routes · JWT verification · Zod · rate limits · logs   │
-└───────────────────────────┬──────────────────────────────────┘
-                            │ typed RPC, getByName(auctionId)
-                            ▼
-          ┌──────────────────────────────────────┐
-          │ Auction Durable Object               │
-          │ sole sequencer for one auction       │
-          │                                      │
-          │ SQLite                               │
-          │ auction · bids · events · commands   │
-          │ numbered migrations + DB triggers   │
-          │                                      │
-          │ transactional deadline alarm         │
-          └──────────────┬───────────────────────┘
-                         │ ordered event after commit
-            ┌────────────┼────────────┬────────────┐
-            ▼            ▼            ▼            ▼
-       Fanout :0     Fanout :1    Fanout :2    Fanout :3
-       retained      retained     retained     retained
-       events + hibernating WebSockets (2,000/shard)
+    subgraph Video[Independent video path]
+        Stream[Cloudflare Stream]
+        CDN[CDN]
+    end
 
-                         │ auction.closed (future outbox)
-                         ▼
-                Queue / Workflow
-                payment · order · notifications
+    subgraph Edge[Cloudflare edge]
+        Worker["Worker — Hono routes · JWT · Zod · rate limits · request logs"]
+    end
+
+    subgraph Authority[Per-auction correctness boundary]
+        AuctionDO["Auction Durable Object — sole sequencer"]
+        SQLite["SQLite — auction · bids · events · retry receipts · migrations · constraints"]
+        Alarm[Transactional deadline alarm]
+        AuctionDO --- SQLite
+        AuctionDO --- Alarm
+    end
+
+    subgraph Delivery[Realtime delivery boundary]
+        F0[Fanout 0]
+        F1[Fanout 1]
+        F2[Fanout 2]
+        F3[Fanout 3]
+        Sockets["Retained events · hibernating WebSockets"]
+        F0 --> Sockets
+        F1 --> Sockets
+        F2 --> Sockets
+        F3 --> Sockets
+    end
+
+    Settlement["Queue / Workflow — payment · order · notifications"]
+
+    Seller -->|video| Stream --> CDN --> Viewers
+    Seller -->|HTTPS| Worker
+    Bidders -->|HTTPS + WebSocket| Worker
+    Viewers -->|HTTPS + WebSocket| Worker
+    Worker -->|"typed RPC: getByName(auctionId)"| AuctionDO
+    AuctionDO -->|ordered event after commit| F0
+    AuctionDO -->|ordered event after commit| F1
+    AuctionDO -->|ordered event after commit| F2
+    AuctionDO -->|ordered event after commit| F3
+    Sockets --> Viewers
+    Sockets --> Bidders
+    AuctionDO -.->|auction.closed via future outbox| Settlement
 ```
 
 The Worker is a protocol adapter, not the auction owner. Hono middleware authenticates and validates, then directly calls the named Durable Object binding. This is why an `auctionStub` helper is unnecessary: `env.AUCTIONS.getByName(id)` is already the typed Cloudflare RPC reference. Importing the `Auction` class would instantiate or call a local class and bypass the remote object's identity, storage, and serialization boundary.
@@ -422,9 +759,37 @@ The Worker is a protocol adapter, not the auction owner. Hono middleware authent
 
 ### Place a bid
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Bidder client
+    participant W as Worker
+    participant A as Auction Durable Object
+    participant DB as SQLite
+    participant F as Fanout shards
+
+    C->>W: POST /bids + JWT + Idempotency-Key
+    W->>W: Authenticate and validate with Zod
+    W->>A: placeBid(actor, key, amount)
+    A->>DB: Find command by actor + key
+    alt Exact retry
+        DB-->>A: Original stored response
+        A-->>W: replayed = true
+    else New command
+        A->>DB: Transaction: validate state and deadline
+        A->>DB: Insert bid + update price and leader
+        A->>DB: Insert event + exact retry receipt
+        A->>DB: Update alarm if anti-snipe extends deadline
+        DB-->>A: Commit
+        A-->>F: Publish ordered event asynchronously after commit
+        A-->>W: Accepted response
+    end
+    W-->>C: Accepted or replayed response
+```
+
 1. Rate limiting and validation occur before the authority lookup.
 2. The object checks the `(actor, idempotency key)` record first. If its fingerprint matches, it returns the stored original response—even if later bids occurred or the deadline passed.
-3. Otherwise, inside one synchronous storage transaction it checks state/time, calculates the minimum, inserts the bid, updates auction state, records the typed event, stores the full command response, and changes the alarm if extended.
+3. Otherwise, inside one synchronous storage transaction it checks state/time, calculates the minimum, inserts the bid, updates auction state, records the typed event, stores the exact retry receipt, and changes the alarm if extended.
 4. Database triggers independently reject impossible price/state/sequence combinations.
 5. After commit, the authority publishes the resulting event/snapshot to four fanout shards.
 
@@ -432,9 +797,49 @@ Two equal simultaneous bids reach the same authority. One advances state; the ne
 
 ### Close
 
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT
+    DRAFT --> LIVE: seller starts
+    LIVE --> LIVE: valid bid before deadline
+    LIVE --> LIVE: anti-snipe bid extends deadline + alarm
+    LIVE --> CLOSED: alarm fires
+    LIVE --> CLOSED: read or bid runs close-if-due
+    CLOSED --> CLOSED: repeated alarm or close request is a no-op
+    CLOSED --> [*]
+
+    note right of CLOSED
+        Winner, close event, and alarm cleanup
+        are committed in one transaction.
+    end note
+```
+
 The persisted server deadline is authoritative. The alarm transitions `LIVE → CLOSED` once, freezes the current leader as winner, records `auction.closed`, and clears the alarm transactionally. If alarm delivery repeats, closed state makes it harmless. A read or bid also performs close-if-due, covering delayed alarm execution.
 
 ### Realtime reconnect
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant F as Fanout shard
+    participant A as Auction authority
+    participant H as History API
+
+    C->>F: WebSocket connect(afterSequence=N)
+    F->>F: Register socket as not-ready
+    F->>A: Request snapshot + bounded events after N
+    A-->>F: Snapshot, cursor, missed events
+    Note over A,F: Newly committed messages remain buffered during bootstrap
+    F-->>C: Snapshot + ordered catch-up
+    F->>F: Replay buffered messages, then mark ready
+    F-->>C: Live auction.event messages
+    alt Gap exceeds retained buffer
+        F-->>C: resyncRequired = true
+        C->>H: GET /history?afterSequence=N
+        H-->>C: Authoritative ordered events
+    end
+```
 
 Viewer identity hashes to one of four fanout objects. The shard accepts the socket as not-ready, asks the authority for a snapshot and bounded events after the requested cursor, then replays any messages that arrived during bootstrap before marking the socket ready. This avoids the snapshot/subscribe gap.
 
@@ -447,7 +852,7 @@ Every message has the authority's sequence. Clients persist the latest cursor, i
 | Accepted response is lost          | Retry same key; receive the exact original snapshot and event.       |
 | Same key has different input       | Fingerprint mismatch returns `IDEMPOTENCY_KEY_REUSED`.               |
 | Equal bids race                    | Single authority serializes them; only the first meets the minimum.  |
-| Authority evicts/restarts          | SQLite, alarm, and command results restore all correctness state.    |
+| Authority evicts/restarts          | SQLite, alarm, and retry receipts restore all correctness state.     |
 | Alarm retries or is delayed        | Close is idempotent; reads/bids also close overdue state.            |
 | Fanout publish fails               | Bid remains committed; client snapshot/history repairs delivery.     |
 | Socket drops during bootstrap      | Reconnect cursor repeats safely and closes the subscribe gap.        |

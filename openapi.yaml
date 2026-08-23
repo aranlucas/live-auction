@@ -29,6 +29,61 @@ components:
         - service
         - environment
       additionalProperties: false
+    DemoBidderSessionSuccess:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum:
+            - true
+        auctionId:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{1,100}$
+          example: vintage-camera-2026
+        bidderId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        expiresAt:
+          type: integer
+          exclusiveMinimum: 0
+        bidderToken:
+          type: string
+          minLength: 1
+      required:
+        - ok
+        - auctionId
+        - bidderId
+        - expiresAt
+        - bidderToken
+      additionalProperties: false
+    Error:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum:
+            - false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            status:
+              type: integer
+              minimum: 400
+              maximum: 599
+          required:
+            - code
+            - message
+            - status
+          additionalProperties: false
+      required:
+        - ok
+        - error
+      additionalProperties: false
     DemoSessionSuccess:
       type: object
       properties:
@@ -59,33 +114,6 @@ components:
         - sellerToken
         - bidderToken
         - viewerToken
-      additionalProperties: false
-    Error:
-      type: object
-      properties:
-        ok:
-          type: boolean
-          enum:
-            - false
-        error:
-          type: object
-          properties:
-            code:
-              type: string
-            message:
-              type: string
-            status:
-              type: integer
-              minimum: 400
-              maximum: 599
-          required:
-            - code
-            - message
-            - status
-          additionalProperties: false
-      required:
-        - ok
-        - error
       additionalProperties: false
     CommandSuccess:
       type: object
@@ -503,6 +531,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Health"
+  /v1/demo-session/{auctionId}/bidder:
+    post:
+      summary: Join a live demo as a new bidder
+      description: Available only in demo-enabled environments. Returns a distinct 15-minute bidder token
+        scoped to an existing live demo auction.
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{1,100}$
+            example: vintage-camera-2026
+          required: true
+          name: auctionId
+          in: path
+      responses:
+        "201":
+          description: Demo bidder created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoBidderSessionSuccess"
+        "404":
+          description: Live demo auction not found or demos disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Demo auction is not live
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Demo signing is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /v1/demo-session:
     post:
       summary: Create a short-lived demo room

@@ -14,7 +14,9 @@ export const auctionIdSchema = z
     example: "vintage-camera-2026",
   });
 
-export const auctionParamsSchema = z.strictObject({ auctionId: auctionIdSchema });
+export const auctionParamsSchema = z.strictObject({
+  auctionId: auctionIdSchema,
+});
 
 export const idempotencyKeySchema = z
   .string()
@@ -254,8 +256,27 @@ export const demoSessionResultSchema = z.discriminatedUnion("ok", [
   operationFailureSchema,
 ]);
 
+export const demoBidderSessionSuccessSchema = z
+  .strictObject({
+    ok: z.literal(true),
+    auctionId: auctionIdSchema,
+    bidderId: z.string().min(1).max(200),
+    expiresAt: z.int().positive(),
+    bidderToken: z.string().min(1),
+  })
+  .openapi("DemoBidderSessionSuccess");
+
+export const demoBidderSessionResultSchema = z.discriminatedUnion("ok", [
+  demoBidderSessionSuccessSchema,
+  operationFailureSchema,
+]);
+
 export const healthSchema = z
-  .strictObject({ ok: z.literal(true), service: z.string(), environment: z.string() })
+  .strictObject({
+    ok: z.literal(true),
+    service: z.string(),
+    environment: z.string(),
+  })
   .openapi("Health");
 
 export type AuctionState = z.infer<typeof auctionStateSchema>;
@@ -280,3 +301,5 @@ export type RealtimeEventMessage = z.infer<typeof realtimeEventMessageSchema>;
 export type RealtimeBootstrapResult = z.infer<typeof realtimeBootstrapResultSchema>;
 export type DemoSessionSuccess = z.infer<typeof demoSessionSuccessSchema>;
 export type DemoSessionResult = z.infer<typeof demoSessionResultSchema>;
+export type DemoBidderSessionSuccess = z.infer<typeof demoBidderSessionSuccessSchema>;
+export type DemoBidderSessionResult = z.infer<typeof demoBidderSessionResultSchema>;

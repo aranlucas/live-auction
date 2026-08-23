@@ -95,19 +95,20 @@ The first message is `auction.snapshot`. It contains the authoritative state, a 
 
 ## API and validation
 
-| Method | Path                               | Purpose                                    |
-| ------ | ---------------------------------- | ------------------------------------------ |
-| `POST` | `/v1/demo-session`                 | Create a scoped 15-minute staging demo     |
-| `PUT`  | `/v1/auctions/{auctionId}`         | Create or replay an identical draft        |
-| `GET`  | `/v1/auctions/{auctionId}`         | Read authoritative state                   |
-| `POST` | `/v1/auctions/{auctionId}/start`   | Start the seller's draft                   |
-| `POST` | `/v1/auctions/{auctionId}/bids`    | Submit an idempotent bid                   |
-| `POST` | `/v1/auctions/{auctionId}/close`   | Finalize a live auction after its deadline |
-| `POST` | `/v1/auctions/{auctionId}/cancel`  | Cancel a draft or live auction             |
-| `GET`  | `/v1/auctions/{auctionId}/history` | Read ordered events after a sequence       |
-| `GET`  | `/v1/auctions/{auctionId}/events`  | Upgrade to a cursor-aware WebSocket        |
-| `GET`  | `/openapi.json`                    | Serve the generated OpenAPI 3.1 contract   |
-| `GET`  | `/health`                          | Read service and environment health        |
+| Method | Path                                  | Purpose                                      |
+| ------ | ------------------------------------- | -------------------------------------------- |
+| `POST` | `/v1/demo-session`                    | Create a scoped 15-minute staging demo       |
+| `POST` | `/v1/demo-session/{auctionId}/bidder` | Join a live demo as a distinct scoped bidder |
+| `PUT`  | `/v1/auctions/{auctionId}`            | Create or replay an identical draft          |
+| `GET`  | `/v1/auctions/{auctionId}`            | Read authoritative state                     |
+| `POST` | `/v1/auctions/{auctionId}/start`      | Start the seller's draft                     |
+| `POST` | `/v1/auctions/{auctionId}/bids`       | Submit an idempotent bid                     |
+| `POST` | `/v1/auctions/{auctionId}/close`      | Finalize a live auction after its deadline   |
+| `POST` | `/v1/auctions/{auctionId}/cancel`     | Cancel a draft or live auction               |
+| `GET`  | `/v1/auctions/{auctionId}/history`    | Read ordered events after a sequence         |
+| `GET`  | `/v1/auctions/{auctionId}/events`     | Upgrade to a cursor-aware WebSocket          |
+| `GET`  | `/openapi.json`                       | Serve the generated OpenAPI 3.1 contract     |
+| `GET`  | `/health`                             | Read service and environment health          |
 
 Hono handles routing and middleware. Zod validates path, query, headers, bodies, JWT claims, SQL rows, stored JSON, RPC boundaries, and the discriminated event-payload union. There is no manual `action === "get"` dispatcher, `auctionStub` wrapper, unsafe cast-based row parser, or generic primitive-only event guard.
 
@@ -139,6 +140,10 @@ Open `http://localhost:3000` and select **Launch instant demo**. The web app ask
 15-minute room, creates the demo lot, starts it, and connects realtime updates. Manual API URLs,
 auction IDs, and JWTs remain available under **Room setup → Advanced setup**. See
 [`apps/web/README.md`](./apps/web/README.md) for the complete browser workflow.
+
+Every active room has a canonical `/auctions/{auctionId}` URL. Select **Open another bidder** to
+open the same auction in a fresh tab with a newly signed bidder identity. The temporary `/join`
+route mints that identity, then replaces itself with the canonical auction URL.
 
 Run every local gate:
 

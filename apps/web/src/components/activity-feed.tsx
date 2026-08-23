@@ -25,7 +25,10 @@ function eventCopy(event: AuctionEvent): { title: string; detail: string } {
         detail: `${event.actorId} is leading with ${currency(event.payload.amountCents)}`,
       };
     case "auction.cancelled":
-      return { title: "Auction cancelled", detail: `Cancelled by ${event.actorId}` };
+      return {
+        title: "Auction cancelled",
+        detail: `Cancelled by ${event.actorId}`,
+      };
     case "auction.closed":
       return {
         title: "Auction closed",

@@ -3,10 +3,22 @@ import { exportJWK, generateKeyPair } from "jose";
 
 const privatePath = process.argv[2] ?? ".auction-auth-private.jwk";
 const publicPath = process.argv[3] ?? ".auction-auth-public.jwks.json";
-const { publicKey, privateKey } = await generateKeyPair("ES256", { extractable: true });
+const { publicKey, privateKey } = await generateKeyPair("ES256", {
+  extractable: true,
+});
 const kid = crypto.randomUUID();
-const publicJwk = { ...(await exportJWK(publicKey)), alg: "ES256", use: "sig", kid };
-const privateJwk = { ...(await exportJWK(privateKey)), alg: "ES256", use: "sig", kid };
+const publicJwk = {
+  ...(await exportJWK(publicKey)),
+  alg: "ES256",
+  use: "sig",
+  kid,
+};
+const privateJwk = {
+  ...(await exportJWK(privateKey)),
+  alg: "ES256",
+  use: "sig",
+  kid,
+};
 const jwks = { keys: [publicJwk] };
 
 await writeFile(privatePath, JSON.stringify(privateJwk), { mode: 0o600 });

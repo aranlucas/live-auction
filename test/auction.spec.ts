@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Auction } from "../src/auction";
 import {
   commandResultSchema,
+  demoBidderSessionResultSchema,
   demoSessionResultSchema,
   historyResultSchema,
   operationFailureSchema,
@@ -111,7 +112,9 @@ describe("live auction API", () => {
   });
 
   it("creates a short-lived demo room whose tokens cannot cross auction boundaries", async () => {
-    const sessionResponse = await request("/v1/demo-session", { method: "POST" });
+    const sessionResponse = await request("/v1/demo-session", {
+      method: "POST",
+    });
     expect(sessionResponse.status).toBe(201);
     expect(sessionResponse.headers.get("Cache-Control")).toBe("no-store");
     const session = demoSessionResultSchema.parse(await sessionResponse.json());
@@ -137,6 +140,58 @@ describe("live auction API", () => {
     });
     expect(create.status).toBe(201);
 
+    const draftJoinResponse = await request(`/v1/demo-session/${session.auctionId}/bidder`, {
+      method: "POST",
+    });
+    expect(draftJoinResponse.status).toBe(409);
+    const draftJoin = demoBidderSessionResultSchema.parse(await draftJoinResponse.json());
+    expect(draftJoin.ok).toBe(false);
+    if (!draftJoin.ok) expect(draftJoin.error.code).toBe("DEMO_AUCTION_NOT_LIVE");
+
+    const start = await request(`/v1/auctions/${session.auctionId}/start`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.sellerToken}`,
+        "Idempotency-Key": "start-scoped-demo",
+      },
+    });
+    expect(start.status).toBe(200);
+
+    const firstBidderResponse = await request(`/v1/demo-session/${session.auctionId}/bidder`, {
+      method: "POST",
+    });
+    const secondBidderResponse = await request(`/v1/demo-session/${session.auctionId}/bidder`, {
+      method: "POST",
+    });
+    expect(firstBidderResponse.status).toBe(201);
+    expect(secondBidderResponse.status).toBe(201);
+    const firstBidder = demoBidderSessionResultSchema.parse(await firstBidderResponse.json());
+    const secondBidder = demoBidderSessionResultSchema.parse(await secondBidderResponse.json());
+    expect(firstBidder.ok && secondBidder.ok).toBe(true);
+    if (!firstBidder.ok || !secondBidder.ok) return;
+    expect(firstBidder.bidderId).not.toBe(secondBidder.bidderId);
+
+    const firstBid = await request(`/v1/auctions/${session.auctionId}/bids`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${firstBidder.bidderToken}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "first-guest-bid",
+      },
+      body: JSON.stringify({ amountCents: 1_000 }),
+    });
+    const secondBid = await request(`/v1/auctions/${session.auctionId}/bids`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secondBidder.bidderToken}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "second-guest-bid",
+      },
+      body: JSON.stringify({ amountCents: 1_100 }),
+    });
+    expect(firstBid.status).toBe(200);
+    expect(secondBid.status).toBe(200);
+
     const objectsBeforeMismatch = await listDurableObjectIds(env.AUCTIONS);
     const mismatch = await request("/v1/auctions/a-different-demo-room", {
       headers: { Authorization: `Bearer ${session.viewerToken}` },
@@ -145,6 +200,19 @@ describe("live auction API", () => {
     const failure = operationFailureSchema.parse(await mismatch.json());
     expect(failure.error.code).toBe("AUCTION_SCOPE_MISMATCH");
     expect(await listDurableObjectIds(env.AUCTIONS)).toHaveLength(objectsBeforeMismatch.length);
+  });
+
+  it("does not mint demo bidders for an auction created by an ordinary seller", async () => {
+    const auctionId = "demo-untrusted-seller";
+    await createAndStart(auctionId);
+
+    const response = await request(`/v1/demo-session/${auctionId}/bidder`, {
+      method: "POST",
+    });
+    expect(response.status).toBe(404);
+    const result = demoBidderSessionResultSchema.parse(await response.json());
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("DEMO_AUCTION_NOT_FOUND");
   });
 
   it("validates path, query, and body inputs at the Hono edge", async () => {
@@ -464,7 +532,9 @@ describe("live auction API", () => {
 
   it("returns request correlation and generated OpenAPI", async () => {
     const requestId = crypto.randomUUID();
-    const health = await request("/health", { headers: { "X-Request-Id": requestId } });
+    const health = await request("/health", {
+      headers: { "X-Request-Id": requestId },
+    });
     expect(health.headers.get("X-Request-Id")).toBe(requestId);
 
     const document = await (
@@ -472,11 +542,15 @@ describe("live auction API", () => {
     ).json<{
       openapi: string;
       paths: Record<string, unknown>;
-      components: { schemas: Record<string, unknown>; securitySchemes: Record<string, unknown> };
+      components: {
+        schemas: Record<string, unknown>;
+        securitySchemes: Record<string, unknown>;
+      };
     }>();
     expect(document.openapi).toBe("3.1.0");
     expect(document.paths["/v1/auctions/{auctionId}/bids"]).toBeDefined();
     expect(document.paths["/v1/demo-session"]).toBeDefined();
+    expect(document.paths["/v1/demo-session/{auctionId}/bidder"]).toBeDefined();
     expect(document.components.schemas.AuctionEvent).toBeDefined();
     expect(document.components.securitySchemes.bearerAuth).toBeDefined();
   });
