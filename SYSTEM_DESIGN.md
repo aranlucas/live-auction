@@ -169,7 +169,7 @@ A seller token cannot bid, and a bidder token cannot start, close, or cancel an 
 Build the design in layers. Each layer answers a requirement introduced earlier and preserves the
 same correctness boundary. Do not draw the final platform all at once.
 
-#### Complexity 1 — One correct command path
+#### Complexity 1 — One correct request path
 
 Start with only the boxes needed to accept a bid correctly:
 
@@ -177,24 +177,26 @@ Start with only the boxes needed to accept a bid correctly:
 flowchart LR
     Seller[Seller]
     Bidder[Bidder]
-    Worker["Worker — authenticate · validate · route"]
-    Auction["Auction Durable Object / actor — stateful authority per auction ID"]
+    Gateway["Edge API / Gateway — authenticate · validate · rate limit · route"]
+    Auction["Auction authority — one Durable Object per auction ID"]
 
-    Seller -->|"seller command — create · start · close · cancel"| Worker
-    Bidder -->|"bid command — PlaceBid"| Worker
-    Worker -->|"getByName(auctionId)"| Auction
-    Auction -->|"command reply — accepted or rejected"| Worker
-    Worker --> Seller
-    Worker --> Bidder
+    Seller -->|"seller action — create · start · close · cancel"| Gateway
+    Bidder -->|place bid| Gateway
+    Gateway -->|"route by auction ID"| Auction
+    Auction -->|"action result — accepted or rejected"| Gateway
+    Gateway --> Seller
+    Gateway --> Bidder
 ```
 
-Say: “Every command for auction A reaches the same logical owner. Different auction IDs resolve to
+Say: “Every request for auction A reaches the same logical owner. Different auction IDs resolve to
 different owners and scale independently.” At this point you have established ordering without
 discussing storage, sockets, video, or payments.
 
-The diagram carries the terminology: the Durable Object is the actor-like stateful owner, the
-incoming arrows are commands, and the accepted/rejected arrow is the immediate reply. A committed
-event is added in complexity 3; the idempotency record is added inside storage in complexity 2.
+The gateway is the stateless public server. In this project it is a Cloudflare Worker running Hono.
+The Durable Object is the stateful auction owner; only it can accept or reject an action. A
+committed event is added in complexity 3, and the idempotency record is added inside storage in
+complexity 2. The gateway is not another origin server placed in front of the Worker; it is the
+logical role the Worker performs.
 
 #### Complexity 2 — Make correctness durable
 
@@ -202,7 +204,7 @@ Now open the authority box and add only the state needed for retries and deadlin
 
 ```mermaid
 flowchart LR
-    Worker[Worker]
+    Gateway[Edge API / Gateway]
 
     subgraph Boundary[Per-auction correctness boundary]
         Auction["Auction Durable Object — sequential state machine"]
@@ -212,12 +214,12 @@ flowchart LR
         Auction --- Alarm
     end
 
-    Worker -->|validated command| Auction
-    Auction -->|exact stored response| Worker
+    Gateway -->|validated action| Auction
+    Auction -->|exact stored response| Gateway
 ```
 
 This layer explains durable idempotency, anti-sniping, recovery after eviction, and at-most-one
-winner. The bid, price, event, retry result, and any deadline change commit together.
+winner. The bid, price, event, idempotency record, and any deadline change commit together.
 
 #### Complexity 3 — Add realtime delivery without weakening correctness
 
@@ -227,19 +229,19 @@ Only after the write path is correct, add the simplest realtime path:
 flowchart LR
     Bidder[Bidder]
     Viewer[Viewer]
-    Worker["Worker — API and realtime gateway"]
+    Gateway["Edge API / Gateway"]
     Auction["Auction authority — decides state"]
     Sockets[WebSocket connections]
 
-    Bidder -->|bid command| Worker --> Auction
-    Auction -->|ordered event after commit| Worker
-    Worker --> Sockets
+    Bidder -->|place bid| Gateway --> Auction
+    Auction -->|ordered event after commit| Gateway
+    Gateway --> Sockets
     Sockets -->|snapshot · event · cursor| Bidder
     Sockets -->|snapshot · event · cursor| Viewer
-    Bidder -.->|"reconnect afterSequence=N"| Worker
-    Viewer -.->|"reconnect afterSequence=N"| Worker
-    Bidder -.->|"large gap: GET /history"| Worker
-    Viewer -.->|"large gap: GET /history"| Worker
+    Bidder -.->|"reconnect afterSequence=N"| Gateway
+    Viewer -.->|"reconnect afterSequence=N"| Gateway
+    Bidder -.->|"large gap: GET /history"| Gateway
+    Viewer -.->|"large gap: GET /history"| Gateway
 ```
 
 The authority still makes every auction decision; realtime delivery only reports committed state.
@@ -257,16 +259,19 @@ flowchart LR
     Viewer[Viewer]
     Stream[Cloudflare Stream]
     CDN[CDN]
+    Gateway[Edge API / Gateway]
     Auction[Auction authority]
     Outbox[Transactional outbox]
     Workflow[Queue / Workflow]
     Settlement[Payment · order · notification]
 
     Seller -->|video| Stream --> CDN --> Viewer
-    Seller -->|"create · start · close · cancel"| Auction
-    Bidder -->|place bid| Auction
-    Auction -->|realtime state| Viewer
-    Auction -->|realtime state| Bidder
+    Seller -->|"create · start · close · cancel"| Gateway
+    Bidder -->|place bid| Gateway
+    Gateway --> Auction
+    Auction -->|committed state| Gateway
+    Gateway -->|realtime state| Viewer
+    Gateway -->|realtime state| Bidder
     Auction -.->|auction.closed| Outbox --> Workflow --> Settlement
 ```
 
@@ -275,8 +280,8 @@ complete reference diagram later in this guide is the combination of these four 
 
 Say this while drawing the authority:
 
-> Every command for auction A resolves to the same logical object. That object processes state
-> transitions sequentially and stores the auction, bids, events, and idempotency results together.
+> Every action request for auction A resolves to the same logical object. That object processes state
+> transitions sequentially and stores the auction, bids, events, and idempotency records together.
 > This gives me a single-writer state machine without a distributed lock. Auctions B and C resolve
 > to different objects and scale independently.
 
@@ -311,16 +316,34 @@ sequenceDiagram
     and
         B->>DO: Bid USD 100
     end
-    DO->>DO: Serialize commands
-    DO->>DO: Commit A, next minimum = USD 110
-    DO-->>A: Accepted
-    DO->>DO: Evaluate B against USD 110
+    DO->>DO: Arrivals queue, one command runs at a time
+    DO->>DO: A runs to completion: validate, commit bid + event + price
+    DO-->>A: Accepted, next minimum = USD 110
+    DO->>DO: B starts against updated state
     DO-->>B: Rejected: BID_TOO_LOW
 ```
 
-The important answer is not merely “single threaded.” The accepted bid, price update, event,
-idempotency record, and any deadline extension must commit in one storage transaction. No external
-cache is allowed to decide the current minimum.
+Explain the word before the interviewer asks. “Serialize” means the authority turns concurrent
+arrivals into a queue: once both bids are routed to the same object there is no “simultaneous,”
+only first and second. The first command runs to completion, including its storage transaction,
+and the second command evaluates against the first command’s committed result. B is not rejected
+by a lock; B is rejected because it is second and the minimum is now USD 110.
+
+> The race never happens; routing resolves it. One auction ID always resolves to one sequencer,
+> and the sequencer finishes each command before starting the next. It is `synchronized
+(auctionId)` provided by the platform — a single-writer state machine without a distributed lock.
+
+The important answer is still not merely “single threaded.” The unit of serialization is the whole
+command: the accepted bid, price update, event, idempotency record, and any deadline extension
+must commit in one storage transaction, and no new request is delivered while that transaction is
+in flight (Durable Objects call this the input gate). If the object read the price, yielded, and
+wrote later, another bid could interleave. No external cache is allowed to decide the current
+minimum.
+
+If the interviewer proposes a conventional database instead, note that row locks serialize the
+transition too, but only the SQL statement sits inside the lock. Here the entire business rule —
+deadline check, anti-snipe extension, alarm update, event append, idempotency write — is one
+serialized unit.
 
 #### Deep dive 2: the response is lost
 
@@ -404,7 +427,7 @@ major increase in complexity.
 Use a compact summary:
 
 > I partition by auction ID and use one Durable Object as the auction’s sequencer, transactional
-> store, and deadline owner. JWT-authenticated, schema-validated commands reach that authority;
+> store, and deadline owner. JWT-authenticated, schema-validated actions reach that authority;
 > SQLite transactions and durable idempotency protect bid correctness. Alarms plus close-if-due
 > recovery select at most one winner. Separate fanout objects distribute ordered events, while
 > cursors and history repair disconnects. Video and settlement are asynchronous adjacent systems.
@@ -421,7 +444,7 @@ If you tend to lose time while drawing, use this sequence:
 flowchart TD
     A["1. Invariants — per-auction order; at most one winner"]
     B["2. API contracts — Idempotency-Key on mutations"]
-    C["3. Clients → Worker → Auction authority"]
+    C["3. Clients → Edge API / Gateway → Auction authority"]
     D["4. SQLite + alarm inside authority"]
     E["5. Committed events → WebSockets"]
     F["6. Video on a separate lane"]
@@ -439,7 +462,7 @@ mode already established in the conversation.
 ### Why not Kafka plus a conventional database?
 
 That is a valid alternative. Partitioning a command log by auction ID can also provide ordering,
-but the design must coordinate log consumption, transactional state, retry results, timers, and
+but the design must coordinate log consumption, transactional state, idempotency records, timers, and
 realtime gateways. Durable Objects collapse those responsibilities into one per-entity execution
 and storage boundary. Kafka may be preferable for portability, extremely high aggregate event
 throughput, or an organization that already operates it.
@@ -569,7 +592,7 @@ flowchart LR
     end
 
     subgraph Edge[Cloudflare edge]
-        Worker["Worker — Hono routes · JWT · Zod · rate limits · request logs"]
+        Gateway["Edge API / Gateway — Cloudflare Worker + Hono"]
     end
 
     subgraph Authority[Per-auction correctness boundary]
@@ -595,10 +618,14 @@ flowchart LR
     Settlement["Queue / Workflow — payment · order · notifications"]
 
     Seller -->|video| Stream --> CDN --> Viewers
-    Seller -->|HTTPS| Worker
-    Bidders -->|HTTPS + WebSocket| Worker
-    Viewers -->|HTTPS + WebSocket| Worker
-    Worker -->|"typed RPC: getByName(auctionId)"| AuctionDO
+    Seller -->|HTTPS| Gateway
+    Bidders -->|HTTPS + WebSocket| Gateway
+    Viewers -->|HTTPS + WebSocket| Gateway
+    Gateway -->|"typed RPC: getByName(auctionId)"| AuctionDO
+    Gateway -->|WebSocket upgrade| F0
+    Gateway -->|WebSocket upgrade| F1
+    Gateway -->|WebSocket upgrade| F2
+    Gateway -->|WebSocket upgrade| F3
     AuctionDO -->|ordered event after commit| F0
     AuctionDO -->|ordered event after commit| F1
     AuctionDO -->|ordered event after commit| F2
@@ -608,13 +635,18 @@ flowchart LR
     AuctionDO -.->|auction.closed via future outbox| Settlement
 ```
 
-The Worker is a protocol adapter, not the auction owner. Hono middleware authenticates and validates, then directly calls the named Durable Object binding. This is why an `auctionStub` helper is unnecessary: `env.AUCTIONS.getByName(id)` is already the typed Cloudflare RPC reference. Importing the `Auction` class would instantiate or call a local class and bypass the remote object's identity, storage, and serialization boundary.
+The Edge API / Gateway is a stateless protocol and policy layer, not the auction owner. A Cloudflare
+Worker running Hono implements it: middleware authenticates, validates, and rate limits before
+calling the named Durable Object binding. This is why an `auctionStub` helper is unnecessary:
+`env.AUCTIONS.getByName(id)` is already the typed Cloudflare RPC reference. Importing the `Auction`
+class would call a local class and bypass the remote object's identity, storage, and serialization
+boundary.
 
 ## 4. Critical flows
 
 ### Create and start
 
-1. The Worker verifies JWT issuer, audience, signature, expiry, subject, and role before object lookup.
+1. The Edge API / Gateway verifies JWT issuer, audience, signature, expiry, subject, and role before object lookup.
 2. Zod validates the auction ID, headers, and strict JSON body.
 3. The named `Auction` object applies any pending numbered SQLite migrations.
 4. Create inserts the draft and `auction.created` event atomically.
@@ -627,7 +659,7 @@ The Worker is a protocol adapter, not the auction owner. Hono middleware authent
 sequenceDiagram
     autonumber
     participant C as Bidder client
-    participant W as Worker
+    participant W as Edge API / Gateway
     participant A as Auction Durable Object
     participant DB as SQLite
     participant F as Fanout shards
