@@ -1,0 +1,48 @@
+{
+  "name": "cloudflare-live-auction",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./model": "./src/model.ts"
+  },
+  "scripts": {
+    "auth:keygen": "tsx scripts/auth-keygen.ts",
+    "auth:token": "tsx scripts/auth-token.ts",
+    "check": "pnpm types:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm openapi:check && pnpm test && pnpm --filter gavel-live-web build && pnpm --filter gavel-live-web deploy:dry-run && pnpm deploy:dry-run",
+    "deploy": "wrangler deploy --env=\"\"",
+    "deploy:dry-run": "wrangler deploy --dry-run --env=\"\" && wrangler deploy --dry-run --env staging",
+    "deploy:staging": "wrangler deploy --env staging",
+    "dev": "wrangler dev",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "lint": "oxlint --deny-warnings --type-aware src test scripts vitest.config.ts && pnpm --filter gavel-live-web lint",
+    "openapi": "tsx scripts/openapi.ts",
+    "openapi:check": "tsx scripts/openapi.ts --check",
+    "test": "vitest run",
+    "test:production": "tsx scripts/production-integration.ts",
+    "typecheck": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit",
+    "types": "wrangler types",
+    "types:check": "wrangler types --check"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.6.1",
+    "@hono/zod-validator": "0.9.0",
+    "hono": "4.13.3",
+    "jose": "^6.2.10",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.0.0",
+    "@types/node": "26.2.0",
+    "oxfmt": "^0.64.0",
+    "oxlint": "^1.79.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11",
+    "wrangler": "4.125.0",
+    "yaml": "^2.9.0"
+  },
+  "packageManager": "pnpm@11.22.0"
+}

@@ -1,0 +1,84 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cloudflare-live-auction",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "production",
+    "DEMO_MODE": "disabled",
+    "AUTH_ISSUER": "https://cloudflare-live-auction.example",
+    "AUTH_AUDIENCE": "cloudflare-live-auction",
+    "AUTH_JWKS_URL": "",
+    "WEB_ORIGINS": "http://localhost:3000,https://gavel-live-web.aranlucas.workers.dev",
+    "AUTH_JWKS_JSON": "{\"keys\":[{\"kty\":\"EC\",\"x\":\"YPrGDt7Vu1jwOGcQFdVDfbgQjiBe_Ds_8d_nKhVGeX8\",\"y\":\"TpHR0QvFesA5VUnYeLLk2r_sPCJwMoVg3VPxR4I1gb4\",\"crv\":\"P-256\",\"alg\":\"ES256\",\"use\":\"sig\",\"kid\":\"6332bef5-8e80-4ef0-8022-8ed9ebd78377\"}]}",
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "AUCTIONS", "class_name": "Auction" },
+      { "name": "AUCTION_FANOUT", "class_name": "AuctionFanout" },
+    ],
+  },
+  "ratelimits": [
+    {
+      "name": "READ_RATE_LIMITER",
+      "namespace_id": "1201",
+      "simple": { "limit": 240, "period": 60 },
+    },
+    {
+      "name": "COMMAND_RATE_LIMITER",
+      "namespace_id": "1202",
+      "simple": { "limit": 120, "period": 60 },
+    },
+  ],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Auction"] },
+    { "tag": "v2", "new_sqlite_classes": ["AuctionFanout"] },
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.1 },
+  },
+  "env": {
+    "staging": {
+      "name": "cloudflare-live-auction-staging",
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "DEMO_MODE": "enabled",
+        "AUTH_ISSUER": "https://cloudflare-live-auction.example",
+        "AUTH_AUDIENCE": "cloudflare-live-auction",
+        "AUTH_JWKS_URL": "",
+        "WEB_ORIGINS": "http://localhost:3000,https://gavel-live-web.aranlucas.workers.dev",
+        "AUTH_JWKS_JSON": "{\"keys\":[{\"kty\":\"EC\",\"x\":\"YPrGDt7Vu1jwOGcQFdVDfbgQjiBe_Ds_8d_nKhVGeX8\",\"y\":\"TpHR0QvFesA5VUnYeLLk2r_sPCJwMoVg3VPxR4I1gb4\",\"crv\":\"P-256\",\"alg\":\"ES256\",\"use\":\"sig\",\"kid\":\"6332bef5-8e80-4ef0-8022-8ed9ebd78377\"}]}",
+      },
+      "durable_objects": {
+        "bindings": [
+          { "name": "AUCTIONS", "class_name": "Auction" },
+          { "name": "AUCTION_FANOUT", "class_name": "AuctionFanout" },
+        ],
+      },
+      "ratelimits": [
+        {
+          "name": "READ_RATE_LIMITER",
+          "namespace_id": "1101",
+          "simple": { "limit": 600, "period": 60 },
+        },
+        {
+          "name": "COMMAND_RATE_LIMITER",
+          "namespace_id": "1102",
+          "simple": { "limit": 600, "period": 60 },
+        },
+      ],
+      "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["Auction"] },
+        { "tag": "v2", "new_sqlite_classes": ["AuctionFanout"] },
+      ],
+      "observability": {
+        "enabled": true,
+        "logs": { "enabled": true, "head_sampling_rate": 1 },
+        "traces": { "enabled": true, "head_sampling_rate": 1 },
+      },
+    },
+  },
+}

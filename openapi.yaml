@@ -1,0 +1,1218 @@
+openapi: 3.1.0
+info:
+  title: Cloudflare Live Auction API
+  version: 1.0.0
+  description: Strongly ordered live auctions backed by one authoritative Durable Object per auction
+    and sharded realtime fanout.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT subject becomes actorId; the signed role claim determines seller, bidder, or viewer
+        permissions.
+  schemas:
+    Health:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum:
+            - true
+        service:
+          type: string
+        environment:
+          type: string
+      required:
+        - ok
+        - service
+        - environment
+      additionalProperties: false
+    DemoSessionSuccess:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum:
+            - true
+        auctionId:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{1,100}$
+          example: vintage-camera-2026
+        expiresAt:
+          type: integer
+          exclusiveMinimum: 0
+        sellerToken:
+          type: string
+          minLength: 1
+        bidderToken:
+          type: string
+          minLength: 1
+        viewerToken:
+          type: string
+          minLength: 1
+      required:
+        - ok
+        - auctionId
+        - expiresAt
+        - sellerToken
+        - bidderToken
+        - viewerToken
+      additionalProperties: false
+    Error:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum:
+            - false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            status:
+              type: integer
+              minimum: 400
+              maximum: 599
+          required:
+            - code
+            - message
+            - status
+          additionalProperties: false
+      required:
+        - ok
+        - error
+      additionalProperties: false
+    CommandSuccess:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum:
+            - true
+        auction:
+          $ref: "#/components/schemas/Auction"
+        event:
+          $ref: "#/components/schemas/AuctionEvent"
+        replayed:
+          type: boolean
+      required:
+        - ok
+        - auction
+        - event
+        - replayed
+      additionalProperties: false
+    Auction:
+      type: object
+      properties:
+        id:
+          type: string
+        sellerId:
+          type: string
+        title:
+          type: string
+        currency:
+          type: string
+        state:
+          $ref: "#/components/schemas/AuctionState"
+        startPriceCents:
+          type: integer
+          exclusiveMinimum: 0
+        currentPriceCents:
+          type:
+            - integer
+            - "null"
+          exclusiveMinimum: 0
+        nextMinimumBidCents:
+          type: integer
+          exclusiveMinimum: 0
+        minIncrementCents:
+          type: integer
+          exclusiveMinimum: 0
+        leaderId:
+          type:
+            - string
+            - "null"
+        bidCount:
+          type: integer
+          minimum: 0
+        version:
+          type: integer
+          exclusiveMinimum: 0
+        durationSeconds:
+          type: integer
+          exclusiveMinimum: 0
+        antiSnipeWindowSeconds:
+          type: integer
+          minimum: 0
+        extensionSeconds:
+          type: integer
+          minimum: 0
+        startsAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+        endsAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+        closedAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+        winnerId:
+          type:
+            - string
+            - "null"
+      required:
+        - id
+        - sellerId
+        - title
+        - currency
+        - state
+        - startPriceCents
+        - currentPriceCents
+        - nextMinimumBidCents
+        - minIncrementCents
+        - leaderId
+        - bidCount
+        - version
+        - durationSeconds
+        - antiSnipeWindowSeconds
+        - extensionSeconds
+        - startsAt
+        - endsAt
+        - closedAt
+        - winnerId
+      additionalProperties: false
+    AuctionState:
+      type: string
+      enum:
+        - DRAFT
+        - LIVE
+        - CLOSED
+        - CANCELLED
+    AuctionEvent:
+      oneOf:
+        - type: object
+          properties:
+            sequence:
+              type: integer
+              exclusiveMinimum: 0
+            actorId:
+              type: string
+            occurredAt:
+              type: integer
+              minimum: 0
+            type:
+              type: string
+              enum:
+                - auction.created
+            payload:
+              type: object
+              properties:
+                title:
+                  type: string
+                currency:
+                  type: string
+                startPriceCents:
+                  type: integer
+                  exclusiveMinimum: 0
+              required:
+                - title
+                - currency
+                - startPriceCents
+              additionalProperties: false
+          required:
+            - sequence
+            - actorId
+            - occurredAt
+            - type
+            - payload
+          additionalProperties: false
+        - type: object
+          properties:
+            sequence:
+              type: integer
+              exclusiveMinimum: 0
+            actorId:
+              type: string
+            occurredAt:
+              type: integer
+              minimum: 0
+            type:
+              type: string
+              enum:
+                - auction.started
+            payload:
+              type: object
+              properties:
+                endsAt:
+                  type: integer
+                  minimum: 0
+              required:
+                - endsAt
+              additionalProperties: false
+          required:
+            - sequence
+            - actorId
+            - occurredAt
+            - type
+            - payload
+          additionalProperties: false
+        - type: object
+          properties:
+            sequence:
+              type: integer
+              exclusiveMinimum: 0
+            actorId:
+              type: string
+            occurredAt:
+              type: integer
+              minimum: 0
+            type:
+              type: string
+              enum:
+                - bid.accepted
+            payload:
+              type: object
+              properties:
+                bidId:
+                  type: string
+                amountCents:
+                  type: integer
+                  exclusiveMinimum: 0
+                extended:
+                  type: boolean
+                endsAt:
+                  type: integer
+                  minimum: 0
+              required:
+                - bidId
+                - amountCents
+                - extended
+                - endsAt
+              additionalProperties: false
+          required:
+            - sequence
+            - actorId
+            - occurredAt
+            - type
+            - payload
+          additionalProperties: false
+        - type: object
+          properties:
+            sequence:
+              type: integer
+              exclusiveMinimum: 0
+            actorId:
+              type: string
+            occurredAt:
+              type: integer
+              minimum: 0
+            type:
+              type: string
+              enum:
+                - auction.cancelled
+            payload:
+              type: object
+              properties: {}
+              additionalProperties: false
+          required:
+            - sequence
+            - actorId
+            - occurredAt
+            - type
+            - payload
+          additionalProperties: false
+        - type: object
+          properties:
+            sequence:
+              type: integer
+              exclusiveMinimum: 0
+            actorId:
+              type: string
+            occurredAt:
+              type: integer
+              minimum: 0
+            type:
+              type: string
+              enum:
+                - auction.closed
+            payload:
+              type: object
+              properties:
+                winnerId:
+                  type:
+                    - string
+                    - "null"
+                amountCents:
+                  type:
+                    - integer
+                    - "null"
+                  exclusiveMinimum: 0
+              required:
+                - winnerId
+                - amountCents
+              additionalProperties: false
+          required:
+            - sequence
+            - actorId
+            - occurredAt
+            - type
+            - payload
+          additionalProperties: false
+    CreateAuctionInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+        startPriceCents:
+          type: integer
+          minimum: 1
+        minIncrementCents:
+          type: integer
+          minimum: 1
+        durationSeconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+        antiSnipeWindowSeconds:
+          type: integer
+          minimum: 0
+          maximum: 300
+        extensionSeconds:
+          type: integer
+          minimum: 0
+          maximum: 300
+      required:
+        - title
+        - currency
+        - startPriceCents
+        - minIncrementCents
+        - durationSeconds
+        - antiSnipeWindowSeconds
+        - extensionSeconds
+      additionalProperties: false
+    ReadSuccess:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum:
+            - true
+        auction:
+          $ref: "#/components/schemas/Auction"
+      required:
+        - ok
+        - auction
+      additionalProperties: false
+    HistorySuccess:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum:
+            - true
+        auction:
+          $ref: "#/components/schemas/Auction"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuctionEvent"
+      required:
+        - ok
+        - auction
+        - events
+      additionalProperties: false
+    BidInput:
+      type: object
+      properties:
+        amountCents:
+          type: integer
+          minimum: 1
+      required:
+        - amountCents
+      additionalProperties: false
+    RealtimeMessage:
+      oneOf:
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - auction.snapshot
+            auction:
+              $ref: "#/components/schemas/Auction"
+            events:
+              type: array
+              items:
+                $ref: "#/components/schemas/AuctionEvent"
+            cursor:
+              type: integer
+              exclusiveMinimum: 0
+            resyncRequired:
+              type: boolean
+          required:
+            - type
+            - auction
+            - events
+            - cursor
+            - resyncRequired
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - auction.event
+            auction:
+              $ref: "#/components/schemas/Auction"
+            event:
+              $ref: "#/components/schemas/AuctionEvent"
+            cursor:
+              type: integer
+              exclusiveMinimum: 0
+          required:
+            - type
+            - auction
+            - event
+            - cursor
+          additionalProperties: false
+  parameters: {}
+paths:
+  /health:
+    get:
+      summary: Worker health
+      responses:
+        "200":
+          description: Worker is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /v1/demo-session:
+    post:
+      summary: Create a short-lived demo room
+      description: Available only in demo-enabled environments. Returns 15-minute role tokens scoped to
+        one generated auction ID.
+      responses:
+        "201":
+          description: Demo session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoSessionSuccess"
+        "404":
+          description: Demo sessions are disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Demo signing is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/auctions/{auctionId}:
+    put:
+      summary: Create an auction
+      security:
+        - bearerAuth: []
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{1,100}$
+            example: vintage-camera-2026
+          required: true
+          name: auctionId
+          in: path
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAuctionInput"
+      responses:
+        "200":
+          description: Existing identical auction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandSuccess"
+        "201":
+          description: Auction created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandSuccess"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient role or auction ownership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Auction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Auction state conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Request body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      summary: Read current auction state
+      security:
+        - bearerAuth: []
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{1,100}$
+            example: vintage-camera-2026
+          required: true
+          name: auctionId
+          in: path
+      responses:
+        "200":
+          description: Current auction state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadSuccess"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient role or auction ownership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Auction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Auction state conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Request body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/auctions/{auctionId}/history:
+    get:
+      summary: Read ordered auction events
+      security:
+        - bearerAuth: []
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{1,100}$
+            example: vintage-camera-2026
+          required: true
+          name: auctionId
+          in: path
+        - schema:
+            type:
+              - number
+              - "null"
+            default: 0
+          required: false
+          name: afterSequence
+          in: query
+        - schema:
+            type: number
+            default: 50
+          required: false
+          name: limit
+          in: query
+      responses:
+        "200":
+          description: Ordered event page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistorySuccess"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient role or auction ownership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Auction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Auction state conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Request body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/auctions/{auctionId}/start:
+    post:
+      summary: Start an auction
+      security:
+        - bearerAuth: []
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{1,100}$
+            example: vintage-camera-2026
+          required: true
+          name: auctionId
+          in: path
+        - schema:
+            type: string
+            pattern: ^Bearer [^\s]+$
+          required: true
+          name: authorization
+          in: header
+        - schema:
+            type: string
+            pattern: ^[\x21-\x7E]{1,200}$
+            example: bid-018f4e9f
+          required: true
+          name: idempotency-key
+          in: header
+      responses:
+        "200":
+          description: Command accepted or replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandSuccess"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient role or auction ownership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Auction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Auction state conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Request body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/auctions/{auctionId}/close:
+    post:
+      summary: Close an ended auction
+      security:
+        - bearerAuth: []
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{1,100}$
+            example: vintage-camera-2026
+          required: true
+          name: auctionId
+          in: path
+        - schema:
+            type: string
+            pattern: ^Bearer [^\s]+$
+          required: true
+          name: authorization
+          in: header
+        - schema:
+            type: string
+            pattern: ^[\x21-\x7E]{1,200}$
+            example: bid-018f4e9f
+          required: true
+          name: idempotency-key
+          in: header
+      responses:
+        "200":
+          description: Command accepted or replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandSuccess"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient role or auction ownership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Auction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Auction state conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Request body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/auctions/{auctionId}/cancel:
+    post:
+      summary: Cancel an auction
+      security:
+        - bearerAuth: []
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{1,100}$
+            example: vintage-camera-2026
+          required: true
+          name: auctionId
+          in: path
+        - schema:
+            type: string
+            pattern: ^Bearer [^\s]+$
+          required: true
+          name: authorization
+          in: header
+        - schema:
+            type: string
+            pattern: ^[\x21-\x7E]{1,200}$
+            example: bid-018f4e9f
+          required: true
+          name: idempotency-key
+          in: header
+      responses:
+        "200":
+          description: Command accepted or replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandSuccess"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient role or auction ownership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Auction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Auction state conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Request body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/auctions/{auctionId}/bids:
+    post:
+      summary: Place a bid
+      security:
+        - bearerAuth: []
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{1,100}$
+            example: vintage-camera-2026
+          required: true
+          name: auctionId
+          in: path
+        - schema:
+            type: string
+            pattern: ^Bearer [^\s]+$
+          required: true
+          name: authorization
+          in: header
+        - schema:
+            type: string
+            pattern: ^[\x21-\x7E]{1,200}$
+            example: bid-018f4e9f
+          required: true
+          name: idempotency-key
+          in: header
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BidInput"
+      responses:
+        "200":
+          description: Bid accepted or replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandSuccess"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient role or auction ownership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Auction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Auction state conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Request body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/auctions/{auctionId}/events:
+    get:
+      summary: Connect to sharded realtime updates
+      description: Use WebSocket subprotocols auction.v1 and auth.<JWT>. Reconnect with afterSequence to
+        receive bounded catch-up events in the snapshot.
+      security:
+        - bearerAuth: []
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{1,100}$
+            example: vintage-camera-2026
+          required: true
+          name: auctionId
+          in: path
+        - schema:
+            type:
+              - number
+              - "null"
+          required: false
+          name: afterSequence
+          in: query
+      responses:
+        "101":
+          description: WebSocket upgraded; messages conform to RealtimeMessage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RealtimeMessage"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient role or auction ownership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Auction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Auction state conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Request body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+webhooks: {}

@@ -1,0 +1,11 @@
+node_modules/
+.wrangler/
+*.cpuprofile
+.dev.vars
+.auction-auth-private.jwk
+.auction-auth-public.jwks.json
+dist/
+coverage/
+artifacts/
+.playwright-cli/
+output/playwright/
