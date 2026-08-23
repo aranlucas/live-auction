@@ -22,147 +22,6 @@ Object. This demonstrates a concrete design without assuming the interviewer wan
 | 38:00-43:00 | Hot-auction scale, multi-region latency, and decomposition |
 | 43:00-45:00 | Tradeoffs and summary                                      |
 
-## What Whatnot interview evidence actually supports
-
-This is a Whatnot-relevant practice problem, not a verified “official Whatnot auction question.”
-Whatnot does not publish a public system-design rubric or fixed question bank. Public candidate
-reports are sparse and can vary by role, level, team, location, and year.
-
-What the available evidence does support:
-
-- One successful candidate reported back-to-back 45-minute product-design and system-design rounds,
-  with questions connected to their experience using the app and ideas for improving it
-  ([Taro candidate report](https://www.jointaro.com/interviews/companies/whatnot/experiences/software-engineer-seattle-wa-june-1-2023-accepted-offer-positive-9d607b94/)).
-- A senior candidate separately reported “improve the Whatnot app” for product design and “design a
-  notification system” for system design
-  ([Glassdoor candidate report](https://www.glassdoor.com/Interview/Product-design-interview-How-would-you-improve-whatnot-app-and-System-design-interview-design-a-notification-system-QTN_5512845.htm)).
-- Whatnot’s published principles emphasize using the product, understanding the customer and the
-  reason for a decision, prioritizing impact, moving quickly, and starting small rather than planning
-  for every possible risk
-  ([Whatnot careers](https://careers.whatnot.com)).
-
-The preparation implication is:
-
-1. Practice a reusable system-design delivery method; do not memorize only this auction design.
-2. Keep product sense separate from system design, but connect technical priorities to buyer and
-   seller outcomes.
-3. Start with the smallest correct system, then add durability, realtime scale, and adjacent systems
-   as the interviewer asks. The progressive Mermaid diagrams below deliberately follow that shape.
-4. Explain tradeoffs before naming products. “Durable Object” is this project’s implementation of a
-   single-writer entity, not the only acceptable interview answer.
-
-If the interviewer does ask about a live auction, current Whatnot product behavior gives useful
-clarifying branches:
-
-- Sellers choose a standard timer, where late bids add time, or a sudden-death timer with a hard
-  ending.
-- Buyers can place the next increment, submit an exact custom bid, set a private max bid, or pre-bid.
-- Bids are binding, and the winner’s saved payment method is charged when the timer ends.
-
-Those are current product behaviors, not assumptions to silently bake into the first design
-([Whatnot bidding guide](https://help.whatnot.com/hc/en-us/articles/14932924544141-Bid-on-an-item-during-a-show)).
-Ask which subset is in scope. This guide proceeds with a simple standard ascending auction, then
-calls out max bidding as an extension.
-
-Whatnot’s public engineering writing also suggests the right scale questions without requiring you
-to copy its internal stack. The company has described a Python main backend for slower-moving data
-and an Elixir Live Service using Phoenix channels and per-auction processes for fast auctions and
-chat. More recently, it reported 583,000 peak viewers in one show and emphasized admission control,
-bursty load tests, load shedding, and graceful degradation
-([Whatnot Live Service architecture](https://medium.com/whatnot-engineering/keeping-up-with-the-fans-scaling-for-big-events-at-whatnot-with-elixir-and-phoenix-1916eba58a76),
-[2026 large-event report](https://medium.com/whatnot-engineering/scaling-whatnot-behind-the-largest-live-shopping-stream-in-us-history-040a458f538c)).
-Therefore, explicitly ask whether you are designing a normal hot auction or a rare tentpole event;
-the fanout and overload plan changes by orders of magnitude, while bid correctness does not.
-
-## Commands, actors, and Whatnot’s published model
-
-A command is **not** an actor. A command is a message asking an actor-like authority to attempt a
-state change.
-
-```mermaid
-flowchart LR
-    Seller[Seller]
-    Bidder[Bidder]
-    Auction["Auction actor / authority — owns state and ordering"]
-    Events["Facts emitted after commit — AuctionStarted · BidAccepted · AuctionClosed"]
-    Subscribers[Bidder and viewer subscribers]
-
-    Seller -->|"command: StartAuction"| Auction
-    Bidder -->|"command: PlaceBid"| Auction
-    Auction -->|reply: accepted or rejected| Seller
-    Auction -->|reply: accepted or rejected| Bidder
-    Auction --> Events --> Subscribers
-```
-
-Use the terms this way:
-
-| Term    | Meaning                                                | Auction example                        |
-| ------- | ------------------------------------------------------ | -------------------------------------- |
-| Actor   | Stateful owner that processes messages in order        | The per-auction Durable Object         |
-| Command | Request to attempt a state change; it may be rejected  | `PlaceBid`, `StartAuction`, `Close`    |
-| Query   | Request that reads state without changing it           | `GetAuction`, `GetHistory`             |
-| Event   | Past-tense fact emitted only after a successful commit | `BidAccepted`, `AuctionClosed`         |
-| Receipt | Stored reply used to make a command retry safe         | Exact response for one idempotency key |
-
-The Cloudflare model and Whatnot’s published architecture are conceptually close:
-
-| Concern          | This Cloudflare project                                   | Whatnot’s published architecture                                            |
-| ---------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Stateful owner   | One named Durable Object per auction                      | Auctions modeled as Elixir GenServer processes                              |
-| Incoming command | Hono HTTP route calls a typed Durable Object RPC method   | Client sends a Phoenix channel `place bid` request event                    |
-| Immediate reply  | Typed HTTP accepted/rejected response                     | Live Service replies `ok` or rejects the request                            |
-| State broadcast  | Committed event goes to separate WebSocket fanout objects | Live Service broadcasts a bid event through Phoenix channels/PubSub         |
-| Placement/scale  | Cloudflare manages object identity and placement          | Kubernetes, Horde, Phoenix PubSub, and the Elixir process model             |
-| Durable state    | Colocated SQLite, alarm, events, and idempotency receipts | Not fully described in the public posts; do not invent this in an interview |
-
-The Whatnot comparison is based on its published Live Service and secret-max-bid articles
-([Elixir/Phoenix architecture](https://medium.com/whatnot-engineering/keeping-up-with-the-fans-scaling-for-big-events-at-whatnot-with-elixir-and-phoenix-1916eba58a76),
-[bid request and broadcast flow](https://medium.com/whatnot-engineering/peeking-behind-the-curtain-of-secret-max-bid-34abed6cbe70)).
-Elixir’s `GenServer.call` and `GenServer.cast` are messages handled by one stateful process; calls
-wait for a reply while casts do not
-([Elixir GenServer documentation](https://hexdocs.pm/elixir/1.18.1/genservers.html)). Cloudflare
-exposes public Durable Object methods as RPC calls on a named stub
-([Cloudflare RPC documentation](https://developers.cloudflare.com/durable-objects/best-practices/create-durable-object-stubs-and-send-requests/)).
-
-### HTTP commands versus Whatnot’s WebSocket commands
-
-Whatnot has publicly described sending a `place bid` request and its immediate reply over a Phoenix
-channel, then broadcasting the accepted bid on that channel. This project sends seller and bidder
-commands over HTTP and reserves WebSockets for committed events. Neither transport changes the
-actor model:
-
-- HTTP makes authentication, request limits, idempotency headers, observability, and ordinary retry
-  semantics easy to explain.
-- A WebSocket command can save repeated connection setup and keep request, reply, and broadcast on
-  one low-latency channel, but reconnects and request correlation must be designed explicitly.
-- In either design, the command needs verified identity and a unique request/idempotency ID. Only
-  the auction authority can acknowledge acceptance. A broadcast is an event, not proof that the
-  original command was safely processed.
-
-For a Whatnot interview, mention the published Phoenix approach if it is useful context, but do not
-rewrite your whole design around it unless the interviewer requires WebSocket commands.
-
-### What this working model does and does not match
-
-It exercises the transferable hard parts: one ordered auction owner, simultaneous-bid
-serialization, authoritative deadlines, idempotent retries, realtime broadcast isolation, and
-cursor-based recovery. It is not a replica of Whatnot:
-
-- It implements simple ascending bids, not private max bids, pre-bids, or proxy auto-bidding.
-- It uses a fixed increment, while Whatnot’s current product can vary increments with price.
-- It gives every subscriber the same event view; Whatnot has described subscriber-specific payloads
-  to keep a bidder’s private max secret.
-- Four fixed fanout shards at 2,000 sockets each are a working-model capacity, not a design for a
-  583,000-viewer tentpole show. That scale needs dynamic shard assignment, admission control,
-  thundering-herd tests, and intentional load shedding.
-- Video, payment capture, inventory, moderation, and fraud controls remain adjacent systems here.
-
-So the interview sentence is:
-
-> “The auction authority is actor-like. Seller actions and bids are commands sent to it; accepted
-> commands produce durable events. The idempotency receipt is only the stored reply for retry
-> safety—it is neither the command nor the actor.”
-
 ## How the interview might actually go
 
 The goal is not to recite the entire design. Build a small correct system first, make the
@@ -318,12 +177,12 @@ flowchart LR
     Seller[Seller]
     Bidder[Bidder]
     Worker["Worker — authenticate · validate · route"]
-    Auction["Auction Durable Object — one authority per auction ID"]
+    Auction["Auction Durable Object / actor — stateful authority per auction ID"]
 
-    Seller -->|"create · start · close · cancel"| Worker
-    Bidder -->|place bid| Worker
+    Seller -->|"seller command — create · start · close · cancel"| Worker
+    Bidder -->|"bid command — PlaceBid"| Worker
     Worker -->|"getByName(auctionId)"| Auction
-    Auction -->|accepted or rejected| Worker
+    Auction -->|"command reply — accepted or rejected"| Worker
     Worker --> Seller
     Worker --> Bidder
 ```
@@ -331,6 +190,10 @@ flowchart LR
 Say: “Every command for auction A reaches the same logical owner. Different auction IDs resolve to
 different owners and scale independently.” At this point you have established ordering without
 discussing storage, sockets, video, or payments.
+
+The diagram carries the terminology: the Durable Object is the actor-like stateful owner, the
+incoming arrows are commands, and the accepted/rejected arrow is the immediate reply. A committed
+event is added in complexity 3; the durable retry receipt is added inside storage in complexity 2.
 
 #### Complexity 2 — Make correctness durable
 
@@ -421,8 +284,7 @@ Say this while drawing the authority:
 
 Then distinguish decision making from delivery:
 
-> The authority accepts or rejects bids. Fanout objects only distribute the result. If fanout is
-> slow or unavailable, it must not change the winning bid.
+> The authority accepts or rejects bids. Fanout objects only distribute the result. If fanout is slow or unavailable, it must not change the winning bid.
 
 After complexity 2, the design is already complete enough to be correct. Complexity 3 makes it
 usable for a live audience, and complexity 4 makes the product boundary explicit. Ask the
@@ -460,6 +322,7 @@ sequenceDiagram
 The important answer is not merely “single threaded.” The accepted bid, price update, event,idempotency result, and any deadline extension must commit in one storage transaction. No external cache is allowed to decide the current minimum.
 
 #### Deep dive 2: the response is lost
+
 ```mermaid
 sequenceDiagram
     autonumber
