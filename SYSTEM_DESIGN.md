@@ -4,7 +4,7 @@
 
 > I’ll design an English ascending live-commerce auction. Viewers see price changes, authenticated bidders submit bids, and the system selects at most one winner. I’ll focus on ordering, deadlines, durability, retry safety, and realtime delivery; video and payment remain adjacent systems.
 >
-> Every transition for one auction needs one authoritative total order. There is no need for global ordering, so I’ll partition by auction ID and give each auction one logical authority. This project implements that authority with a Durable Object. Realtime sockets can scale separately because they never decide state.
+> Every committed state transition for one auction needs one authoritative order. There is no need for global ordering, so I’ll partition by auction ID and give each auction one logical authority. This project implements that authority with a Durable Object. Realtime sockets can scale separately because they never decide state.
 
 For an interview, keep the first sentence vendor-neutral: use **one logical auction authority per
 auction ID**. Then say that this working project implements that authority with a Cloudflare Durable
@@ -61,9 +61,9 @@ If the interviewer does not supply scale, continue with explicit working assumpt
 
 Then state the key invariant early:
 
-> Within one auction, bids, seller actions, deadline changes, and close must have one authoritative
-> order. We do not need a global order across unrelated auctions, so auction ID is the natural
-> partition key.
+> Within one auction, accepted bids, seller actions, deadline changes, and close must have one
+> authoritative commit order. We do not need a global order across unrelated auctions, so auction
+> ID is the natural partition key.
 
 This sentence should drive the rest of the interview.
 
@@ -310,40 +310,51 @@ sequenceDiagram
     participant A as Bidder A
     participant B as Bidder B
     participant DO as Auction(camera-001)
+    participant DB as SQLite transaction
 
     par Equal bids arrive
         A->>DO: Bid USD 100
     and
         B->>DO: Bid USD 100
     end
-    DO->>DO: Arrivals queue, one command runs at a time
-    DO->>DO: A runs to completion: validate, commit bid + event + price
-    DO-->>A: Accepted, next minimum = USD 110
-    DO->>DO: B starts against updated state
+    Note over DO,DB: Assume A's transition is serialized first
+    DO->>DB: Validate A and atomically commit bid + event + price
+    DB-->>DO: Committed at sequence N, next minimum = USD 110
+    DO-->>A: Accepted
+    DO->>DB: Evaluate B against committed state at sequence N
+    DB-->>DO: Below current minimum, no state change
     DO-->>B: Rejected: BID_TOO_LOW
 ```
 
-Explain the word before the interviewer asks. “Serialize” means the authority turns concurrent
-arrivals into a queue: once both bids are routed to the same object there is no “simultaneous,”
-only first and second. The first command runs to completion, including its storage transaction,
-and the second command evaluates against the first command’s committed result. B is not rejected
-by a lock; B is rejected because it is second and the minimum is now USD 110.
+Explain the guarantee precisely: “serialize” means the authority establishes one commit order for
+state transitions. It does not mean global FIFO, client-click order, or that an arbitrary async RPC
+method runs from beginning to end without interleaving. The diagram chooses A as first only to show
+the result; network arrival and runtime scheduling could choose B instead.
 
-> The race never happens; routing resolves it. One auction ID always resolves to one sequencer,
-> and the sequencer finishes each command before starting the next. It is `synchronized
-(auctionId)` provided by the platform — a single-writer state machine without a distributed lock.
+| Scope                                   | What Durable Objects provide                                             |
+| --------------------------------------- | ------------------------------------------------------------------------ |
+| Same auction ID                         | Deterministic routing to one logical object and its private storage      |
+| Calls made on the same stub             | Delivered in the order the caller made them                              |
+| Calls from different clients or Workers | No global FIFO or client-time ordering guarantee                         |
+| Local SQLite transition                 | One atomic commit or rollback, protected by storage concurrency controls |
+| Code around arbitrary external `await`  | May interleave with another event; do not rely on whole-method exclusion |
+| Different auction IDs                   | Independent objects with no shared order                                 |
 
-The important answer is still not merely “single threaded.” The unit of serialization is the whole
-command: the accepted bid, price update, event, idempotency record, and any deadline extension
-must commit in one storage transaction, and no new request is delivered while that transaction is
-in flight (Durable Objects call this the input gate). If the object read the price, yielded, and
-wrote later, another bid could interleave. No external cache is allowed to decide the current
-minimum.
+> One auction ID resolves to one authority. That authority gives committed state transitions one
+> order, and the next transition evaluates the resulting state. This is a single-writer state
+> machine without a distributed application lock; it is not a global FIFO queue.
 
-If the interviewer proposes a conventional database instead, note that row locks serialize the
-transition too, but only the SQL statement sits inside the lock. Here the entire business rule —
-deadline check, anti-snipe extension, alarm update, event append, idempotency write — is one
-serialized unit.
+The important answer is not merely “single threaded.” The correctness-critical path stays inside
+local transactional storage: deadline validation, bid insertion, price and leader update, event
+append, idempotency record, and any alarm change commit together. Storage input gates and the
+SQLite transaction protect that transition. An external `fetch()`, Workers KV call, or other
+unrelated `await` could permit interleaving, so none belongs between reading auction state and
+committing the bid. No external cache is allowed to decide the current minimum.
+
+If the interviewer proposes a conventional database instead, note that a row transaction can also
+serialize this transition. The Durable Object combines deterministic entity routing, execution,
+private storage, and the deadline alarm in one boundary; it does not eliminate the need to define
+the transaction correctly.
 
 #### Deep dive 2: the response is lost
 
@@ -387,9 +398,9 @@ expired auction accepting bids.
 If the interviewer asks about a bid arriving at the exact deadline:
 
 > The authority compares its server time to the persisted deadline. Client timestamps are not
-> trusted. The ordering is deterministic at the authority, although geographically distant users
-> may experience different network latency; that is a product-fairness tradeoff, not something
-> client clocks can safely fix.
+> trusted. Once the authority establishes a transaction order, each outcome is deterministic from
+> committed state. Which client reaches that order first still depends on network and scheduling
+> latency; client clocks cannot safely resolve that product-fairness tradeoff.
 
 #### Deep dive 4: reconnect without missing an event
 
@@ -495,10 +506,10 @@ shards is a capacity-planning result, not a correctness constant.
 
 ### Can you guarantee fairness for a bidder on another continent?
 
-The system guarantees one authoritative arrival order, not equal network latency. Trusting client
-timestamps would create a fraud and clock-skew problem. Product mitigations include proxy bidding,
-longer anti-snipe extensions, or regional eligibility rules. True active-active acceptance requires
-consensus on each auction’s order.
+The system guarantees one authoritative commit order, not FIFO by click time or equal network
+latency. Trusting client timestamps would create a fraud and clock-skew problem. Product mitigations
+include proxy bidding, longer anti-snipe extensions, or regional eligibility rules. True
+active-active acceptance requires consensus on each auction’s order.
 
 ### Is the auction closed exactly once?
 
@@ -543,9 +554,9 @@ Assume an English auction with one logical lot, server time, integer minor curre
 
 The principal invariants are:
 
-1. One auction has one state-transition order and monotonically increasing event sequence.
+1. One auction has one committed state-transition order and monotonically increasing event sequence.
 2. A bid is accepted only while `LIVE`, before the authoritative deadline, and at or above the current minimum.
-3. One accepted command produces one durable event; a retry returns its original result.
+3. One accepted action produces one durable event; a retry returns its original result.
 4. A deadline and its alarm change atomically with the state transition that establishes them.
 5. Closing is idempotent and chooses at most one winner.
 6. Realtime delivery can duplicate or disconnect, but clients can recover from an authoritative cursor.
@@ -739,7 +750,7 @@ sequenceDiagram
 
 Viewer identity hashes to one of four fanout objects. The shard accepts the socket as not-ready, asks the authority for a snapshot and bounded events after the requested cursor, then replays any messages that arrived during bootstrap before marking the socket ready. This avoids the snapshot/subscribe gap.
 
-Every message has the authority's sequence. Clients persist the latest cursor, ignore duplicates, reconnect with `afterSequence`, and use `/history` when the snapshot says `resyncRequired`. Fanout delivery is therefore at least once; state transitions remain exactly once under idempotent retries.
+Every message has the authority's sequence. Clients persist the latest cursor, ignore duplicates, reconnect with `afterSequence`, and use `/history` when the snapshot says `resyncRequired`. Fanout delivery is therefore at least once; cooperating clients get effectively-once state transitions through durable idempotency.
 
 ## 5. Failure analysis
 
@@ -747,7 +758,7 @@ Every message has the authority's sequence. Clients persist the latest cursor, i
 | ---------------------------------- | -------------------------------------------------------------------- |
 | Accepted response is lost          | Retry same key; receive the exact original snapshot and event.       |
 | Same key has different input       | Fingerprint mismatch returns `IDEMPOTENCY_KEY_REUSED`.               |
-| Equal bids race                    | Single authority serializes them; only the first meets the minimum.  |
+| Equal bids race                    | One transaction commits first; the next evaluates updated state.     |
 | Authority evicts/restarts          | SQLite, alarm, and idempotency records restore correctness state.    |
 | Alarm retries or is delayed        | Close is idempotent; reads/bids also close overdue state.            |
 | Fanout publish fails               | Bid remains committed; client snapshot/history repairs delivery.     |
@@ -774,4 +785,10 @@ Cloudflare compresses the architecture—compute, object identity, SQLite, alarm
 
 ## Final interview summary
 
-> The system partitions by auction ID. One Durable Object is the sole sequencer, transactional store, and deadline owner for that auction. Typed Hono routes and Zod protect the edge; verified JWT claims establish identity. SQLite transactions, database constraints, and complete idempotency responses protect bids. Alarms plus recovery paths close exactly once. Four hibernating fanout objects distribute ordered events without entering the correctness boundary, and cursor/history recovery handles disconnects. Video and settlement remain asynchronous adjacent systems.
+> The system partitions by auction ID. One Durable Object establishes the authoritative order of
+> committed transitions and owns transactional state and the deadline for that auction. Typed Hono
+> routes and Zod protect the edge; verified JWT claims establish identity. SQLite transactions,
+> database constraints, and complete idempotency responses protect bids. Alarms plus recovery paths
+> produce one durable close transition. Four hibernating fanout objects distribute ordered events
+> without entering the correctness boundary, and cursor/history recovery handles disconnects.
+> Video and settlement remain asynchronous adjacent systems.
