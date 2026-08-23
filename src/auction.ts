@@ -3,15 +3,15 @@ import { z } from "zod";
 import {
   auctionEventSchema,
   auctionViewSchema,
-  commandSuccessSchema,
+  auctionActionSuccessSchema,
   eventPayloadSchemas,
   realtimeEventMessageSchema,
   type AuctionEvent,
   type AuctionEventType,
   type AuctionState,
   type AuctionView,
-  type CommandResult,
-  type CommandSuccess,
+  type AuctionActionResult,
+  type AuctionActionSuccess,
   type CreateAuctionInput,
   type EventPayloadByType,
   type HistoryResult,
@@ -54,20 +54,20 @@ const eventRowSchema = z.strictObject({
   payload_json: z.string(),
 });
 
-const idempotencyRowSchema = z.strictObject({
-  command_type: z.string(),
+const idempotencyRecordSchema = z.strictObject({
+  action_type: z.string(),
   request_fingerprint: z.string(),
   event_sequence: z.int().positive(),
-  response_json: z.string().nullable(),
+  response_json: z.string(),
 });
 
 type AuctionRow = z.infer<typeof auctionRowSchema>;
 type EventRow = z.infer<typeof eventRowSchema>;
-type CommandRow = z.infer<typeof idempotencyRowSchema>;
+type IdempotencyRecord = z.infer<typeof idempotencyRecordSchema>;
 
-interface CommandOutcome {
-  result: CommandResult;
-  published?: CommandSuccess;
+interface AuctionActionOutcome {
+  result: AuctionActionResult;
+  published?: AuctionActionSuccess;
 }
 
 const failure = (status: number, code: string, message: string): OperationFailure => ({
@@ -133,10 +133,10 @@ export class Auction extends DurableObject<Env> {
           occurred_at INTEGER NOT NULL,
           payload_json TEXT NOT NULL
         );
-        CREATE TABLE command_results (
+        CREATE TABLE idempotency_records (
           actor_id TEXT NOT NULL,
           idempotency_key TEXT NOT NULL,
-          command_type TEXT NOT NULL,
+          action_type TEXT NOT NULL,
           request_fingerprint TEXT NOT NULL,
           event_sequence INTEGER NOT NULL,
           created_at INTEGER NOT NULL,
@@ -148,7 +148,7 @@ export class Auction extends DurableObject<Env> {
 
     if (currentVersion < 2) {
       this.ctx.storage.sql.exec(`
-        ALTER TABLE command_results ADD COLUMN response_json TEXT;
+        ALTER TABLE idempotency_records ADD COLUMN response_json TEXT;
         INSERT INTO _sql_schema_migrations (id, applied_at) VALUES (2, ${Date.now()});
       `);
     }
@@ -203,12 +203,34 @@ export class Auction extends DurableObject<Env> {
           )
         BEGIN SELECT RAISE(ABORT, 'event invariant violated'); END;
 
-        CREATE TRIGGER validate_command_insert
-        BEFORE INSERT ON command_results
+        CREATE TRIGGER validate_idempotency_record_insert
+        BEFORE INSERT ON idempotency_records
         WHEN NEW.event_sequence <= 0 OR NEW.response_json IS NULL
-        BEGIN SELECT RAISE(ABORT, 'command invariant violated'); END;
+        BEGIN SELECT RAISE(ABORT, 'idempotency record invariant violated'); END;
 
         INSERT INTO _sql_schema_migrations (id, applied_at) VALUES (3, ${Date.now()});
+      `);
+    }
+
+    if (currentVersion < 4) {
+      this.ctx.storage.sql.exec(`
+        DROP TRIGGER IF EXISTS validate_command_insert;
+        DROP TABLE IF EXISTS command_results;
+        CREATE TABLE IF NOT EXISTS idempotency_records (
+          actor_id TEXT NOT NULL,
+          idempotency_key TEXT NOT NULL,
+          action_type TEXT NOT NULL,
+          request_fingerprint TEXT NOT NULL,
+          event_sequence INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          response_json TEXT NOT NULL,
+          PRIMARY KEY (actor_id, idempotency_key)
+        );
+        CREATE TRIGGER IF NOT EXISTS validate_idempotency_record_insert
+        BEFORE INSERT ON idempotency_records
+        WHEN NEW.event_sequence <= 0 OR NEW.response_json IS NULL
+        BEGIN SELECT RAISE(ABORT, 'idempotency record invariant violated'); END;
+        INSERT INTO _sql_schema_migrations (id, applied_at) VALUES (4, ${Date.now()});
       `);
     }
   }
@@ -217,13 +239,13 @@ export class Auction extends DurableObject<Env> {
     auctionId: string,
     sellerId: string,
     input: CreateAuctionInput,
-  ): Promise<CommandResult> {
+  ): Promise<AuctionActionResult> {
     const existing = this.readAuctionRow();
     if (existing) {
       if (this.matchesCreate(existing, auctionId, sellerId, input)) {
         const event = this.readEvent(1);
         return event
-          ? commandSuccessSchema.parse({
+          ? auctionActionSuccessSchema.parse({
               ok: true,
               auction: this.toView(existing),
               event,
@@ -261,7 +283,7 @@ export class Auction extends DurableObject<Env> {
         currency: input.currency,
         startPriceCents: input.startPriceCents,
       });
-      return commandSuccessSchema.parse({
+      return auctionActionSuccessSchema.parse({
         ok: true,
         auction: this.toView(this.requireAuctionRow()),
         event,
@@ -319,9 +341,9 @@ export class Auction extends DurableObject<Env> {
     };
   }
 
-  async startAuction(sellerId: string, idempotencyKey: string): Promise<CommandResult> {
+  async startAuction(sellerId: string, idempotencyKey: string): Promise<AuctionActionResult> {
     const now = Date.now();
-    const outcome = await this.ctx.storage.transaction(async (): Promise<CommandOutcome> => {
+    const outcome = await this.ctx.storage.transaction(async (): Promise<AuctionActionOutcome> => {
       const row = this.readAuctionRow();
       if (!row)
         return {
@@ -333,7 +355,7 @@ export class Auction extends DurableObject<Env> {
         };
       }
 
-      const replay = this.replay(row, sellerId, idempotencyKey, "start", "");
+      const replay = this.replayIdempotentRequest(sellerId, idempotencyKey, "start", "");
       if (replay) {
         if (row.state === "LIVE" && row.ends_at !== null) {
           await this.ctx.storage.setAlarm(row.ends_at);
@@ -356,13 +378,13 @@ export class Auction extends DurableObject<Env> {
         row.id,
       );
       const event = this.insertEvent(sequence, "auction.started", sellerId, now, { endsAt });
-      const result = commandSuccessSchema.parse({
+      const result = auctionActionSuccessSchema.parse({
         ok: true,
         auction: this.toView(this.requireAuctionRow()),
         event,
         replayed: false,
       });
-      this.recordCommand(sellerId, idempotencyKey, "start", "", result, now);
+      this.storeIdempotencyRecord(sellerId, idempotencyKey, "start", "", result, now);
       await this.ctx.storage.setAlarm(endsAt);
       return { result, published: result };
     });
@@ -375,17 +397,17 @@ export class Auction extends DurableObject<Env> {
     bidderId: string,
     idempotencyKey: string,
     amountCents: number,
-  ): Promise<CommandResult> {
+  ): Promise<AuctionActionResult> {
     const now = Date.now();
     const fingerprint = String(amountCents);
-    const outcome = await this.ctx.storage.transaction(async (): Promise<CommandOutcome> => {
+    const outcome = await this.ctx.storage.transaction(async (): Promise<AuctionActionOutcome> => {
       const row = this.readAuctionRow();
       if (!row)
         return {
           result: failure(404, "AUCTION_NOT_FOUND", "Auction not found"),
         };
 
-      const replay = this.replay(row, bidderId, idempotencyKey, "bid", fingerprint);
+      const replay = this.replayIdempotentRequest(bidderId, idempotencyKey, "bid", fingerprint);
       if (replay) {
         if (row.state === "LIVE" && row.ends_at !== null) {
           await this.ctx.storage.setAlarm(row.ends_at);
@@ -452,13 +474,13 @@ export class Auction extends DurableObject<Env> {
         extended: shouldExtend,
         endsAt,
       });
-      const result = commandSuccessSchema.parse({
+      const result = auctionActionSuccessSchema.parse({
         ok: true,
         auction: this.toView(this.requireAuctionRow()),
         event,
         replayed: false,
       });
-      this.recordCommand(bidderId, idempotencyKey, "bid", fingerprint, result, now);
+      this.storeIdempotencyRecord(bidderId, idempotencyKey, "bid", fingerprint, result, now);
       if (shouldExtend) await this.ctx.storage.setAlarm(endsAt);
       return { result, published: result };
     });
@@ -467,9 +489,9 @@ export class Auction extends DurableObject<Env> {
     return outcome.result;
   }
 
-  async closeAuction(sellerId: string, idempotencyKey: string): Promise<CommandResult> {
+  async closeAuction(sellerId: string, idempotencyKey: string): Promise<AuctionActionResult> {
     const now = Date.now();
-    const outcome = await this.ctx.storage.transaction(async (): Promise<CommandOutcome> => {
+    const outcome = await this.ctx.storage.transaction(async (): Promise<AuctionActionOutcome> => {
       const row = this.readAuctionRow();
       if (!row)
         return {
@@ -481,7 +503,7 @@ export class Auction extends DurableObject<Env> {
         };
       }
 
-      const replay = this.replay(row, sellerId, idempotencyKey, "close", "");
+      const replay = this.replayIdempotentRequest(sellerId, idempotencyKey, "close", "");
       if (replay) return { result: replay };
       if (row.state === "CLOSED") {
         return {
@@ -506,7 +528,7 @@ export class Auction extends DurableObject<Env> {
       const result = this.closeAtSync(now, sellerId, {
         actorId: sellerId,
         idempotencyKey,
-        commandType: "close",
+        actionType: "close",
       });
       if (!result) {
         return {
@@ -521,9 +543,9 @@ export class Auction extends DurableObject<Env> {
     return outcome.result;
   }
 
-  async cancelAuction(sellerId: string, idempotencyKey: string): Promise<CommandResult> {
+  async cancelAuction(sellerId: string, idempotencyKey: string): Promise<AuctionActionResult> {
     const now = Date.now();
-    const outcome = await this.ctx.storage.transaction(async (): Promise<CommandOutcome> => {
+    const outcome = await this.ctx.storage.transaction(async (): Promise<AuctionActionOutcome> => {
       const row = this.readAuctionRow();
       if (!row)
         return {
@@ -535,7 +557,7 @@ export class Auction extends DurableObject<Env> {
         };
       }
 
-      const replay = this.replay(row, sellerId, idempotencyKey, "cancel", "");
+      const replay = this.replayIdempotentRequest(sellerId, idempotencyKey, "cancel", "");
       if (replay) return { result: replay };
       if (row.state !== "DRAFT" && row.state !== "LIVE") {
         return {
@@ -551,13 +573,13 @@ export class Auction extends DurableObject<Env> {
         row.id,
       );
       const event = this.insertEvent(sequence, "auction.cancelled", sellerId, now, {});
-      const result = commandSuccessSchema.parse({
+      const result = auctionActionSuccessSchema.parse({
         ok: true,
         auction: this.toView(this.requireAuctionRow()),
         event,
         replayed: false,
       });
-      this.recordCommand(sellerId, idempotencyKey, "cancel", "", result, now);
+      this.storeIdempotencyRecord(sellerId, idempotencyKey, "cancel", "", result, now);
       await this.ctx.storage.deleteAlarm();
       return { result, published: result };
     });
@@ -578,7 +600,7 @@ export class Auction extends DurableObject<Env> {
     if (closed) this.publish(closed);
   }
 
-  private async closeIfDue(now: number): Promise<CommandSuccess | null> {
+  private async closeIfDue(now: number): Promise<AuctionActionSuccess | null> {
     const row = this.readAuctionRow();
     if (!row || row.state !== "LIVE" || row.ends_at === null || row.ends_at > now) return null;
     return this.ctx.storage.transaction(async () => {
@@ -591,12 +613,12 @@ export class Auction extends DurableObject<Env> {
   private closeAtSync(
     now: number,
     actorId: string,
-    command: {
+    idempotency: {
       actorId: string;
       idempotencyKey: string;
-      commandType: "close";
+      actionType: "close";
     } | null,
-  ): CommandSuccess | null {
+  ): AuctionActionSuccess | null {
     const row = this.readAuctionRow();
     if (!row || row.state !== "LIVE") return null;
     const sequence = row.version + 1;
@@ -611,17 +633,17 @@ export class Auction extends DurableObject<Env> {
       winnerId: row.leader_id,
       amountCents: row.current_price_cents,
     });
-    const result = commandSuccessSchema.parse({
+    const result = auctionActionSuccessSchema.parse({
       ok: true,
       auction: this.toView(this.requireAuctionRow()),
       event,
       replayed: false,
     });
-    if (command) {
-      this.recordCommand(
-        command.actorId,
-        command.idempotencyKey,
-        command.commandType,
+    if (idempotency) {
+      this.storeIdempotencyRecord(
+        idempotency.actorId,
+        idempotency.idempotencyKey,
+        idempotency.actionType,
         "",
         result,
         now,
@@ -630,62 +652,50 @@ export class Auction extends DurableObject<Env> {
     return result;
   }
 
-  private replay(
-    row: AuctionRow,
+  private replayIdempotentRequest(
     actorId: string,
     key: string,
-    commandType: string,
+    actionType: string,
     fingerprint: string,
-  ): CommandResult | null {
+  ): AuctionActionResult | null {
     const raw = this.ctx.storage.sql
       .exec<Record<string, SqlStorageValue>>(
-        `SELECT command_type, request_fingerprint, event_sequence, response_json
-         FROM command_results WHERE actor_id = ? AND idempotency_key = ?`,
+        `SELECT action_type, request_fingerprint, event_sequence, response_json
+         FROM idempotency_records WHERE actor_id = ? AND idempotency_key = ?`,
         actorId,
         key,
       )
       .toArray()[0];
     if (!raw) return null;
-    const stored: CommandRow = idempotencyRowSchema.parse(sqlRowSchema.parse(raw));
-    if (stored.command_type !== commandType || stored.request_fingerprint !== fingerprint) {
+    const stored: IdempotencyRecord = idempotencyRecordSchema.parse(sqlRowSchema.parse(raw));
+    if (stored.action_type !== actionType || stored.request_fingerprint !== fingerprint) {
       return failure(
         409,
         "IDEMPOTENCY_KEY_REUSED",
-        "The idempotency key was already used for a different command",
+        "The idempotency key was already used for a different request",
       );
     }
-    if (stored.response_json) {
-      const original = commandSuccessSchema.parse(JSON.parse(stored.response_json));
-      return { ...original, replayed: true };
-    }
-    const event = this.readEvent(stored.event_sequence);
-    return event
-      ? commandSuccessSchema.parse({
-          ok: true,
-          auction: this.toView(row),
-          event,
-          replayed: true,
-        })
-      : failure(500, "INVARIANT_VIOLATION", "The idempotent command event is missing");
+    const original = auctionActionSuccessSchema.parse(JSON.parse(stored.response_json));
+    return { ...original, replayed: true };
   }
 
-  private recordCommand(
+  private storeIdempotencyRecord(
     actorId: string,
     key: string,
-    commandType: string,
+    actionType: string,
     fingerprint: string,
-    response: CommandSuccess,
+    response: AuctionActionSuccess,
     createdAt: number,
   ): void {
-    const verified = commandSuccessSchema.parse(response);
+    const verified = auctionActionSuccessSchema.parse(response);
     this.ctx.storage.sql.exec(
-      `INSERT INTO command_results (
-        actor_id, idempotency_key, command_type, request_fingerprint,
+      `INSERT INTO idempotency_records (
+        actor_id, idempotency_key, action_type, request_fingerprint,
         event_sequence, created_at, response_json
       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       actorId,
       key,
-      commandType,
+      actionType,
       fingerprint,
       verified.event.sequence,
       createdAt,
@@ -810,7 +820,7 @@ export class Auction extends DurableObject<Env> {
     );
   }
 
-  private publish(result: CommandSuccess): void {
+  private publish(result: AuctionActionSuccess): void {
     const message: RealtimeEventMessage = realtimeEventMessageSchema.parse({
       type: "auction.event",
       auction: result.auction,

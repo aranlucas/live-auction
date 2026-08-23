@@ -2,7 +2,7 @@ import { env, exports } from "cloudflare:workers";
 import { evictDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import {
-  commandResultSchema,
+  auctionActionResultSchema,
   eventPayloadSchema,
   historyResultSchema,
   readResultSchema,
@@ -97,10 +97,10 @@ describe("Durable Object integration behavior", () => {
     const id = "create-replay-integration";
     expect((await createDraft(id)).status).toBe(201);
 
-    const replay = commandResultSchema.parse(await (await createDraft(id)).json());
+    const replay = auctionActionResultSchema.parse(await (await createDraft(id)).json());
     expect(replay.ok && replay.replayed).toBe(true);
 
-    const conflict = commandResultSchema.parse(
+    const conflict = auctionActionResultSchema.parse(
       await (await createDraft(id, "Different camera")).json(),
     );
     expect(conflict.ok).toBe(false);
@@ -234,7 +234,7 @@ describe("Durable Object integration behavior", () => {
   it("cancels a live auction, removes its alarm, and rejects later bids", async () => {
     const id = "cancel-alarm-integration";
     await createAndStart(id);
-    const cancelled = commandResultSchema.parse(
+    const cancelled = auctionActionResultSchema.parse(
       await (
         await request(`/v1/auctions/${id}/cancel`, {
           method: "POST",
@@ -245,7 +245,7 @@ describe("Durable Object integration behavior", () => {
     expect(cancelled.ok && cancelled.auction.state).toBe("CANCELLED");
     expect(await runDurableObjectAlarm(env.AUCTIONS.getByName(id))).toBe(false);
 
-    const late = commandResultSchema.parse(
+    const late = auctionActionResultSchema.parse(
       await (await placeBid(id, "late-bidder", 1_000, "cancelled-late-bid")).json(),
     );
     expect(late.ok).toBe(false);

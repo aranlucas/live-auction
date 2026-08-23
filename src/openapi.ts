@@ -5,7 +5,7 @@ import {
   auctionParamsSchema,
   bidInputSchema,
   commandHeadersSchema,
-  commandSuccessSchema,
+  auctionActionSuccessSchema,
   createAuctionInputSchema,
   demoBidderSessionSuccessSchema,
   demoSessionSuccessSchema,
@@ -24,7 +24,7 @@ const jsonContent = (schema: ZodType) => ({
 
 function response(
   schema:
-    | typeof commandSuccessSchema
+    | typeof auctionActionSuccessSchema
     | typeof readSuccessSchema
     | typeof historySuccessSchema
     | typeof operationFailureSchema
@@ -108,8 +108,8 @@ export function registerOpenApi<Environment extends HonoEnvironment>(
       },
     },
     responses: {
-      200: response(commandSuccessSchema, "Existing identical auction"),
-      201: response(commandSuccessSchema, "Auction created"),
+      200: response(auctionActionSuccessSchema, "Existing identical auction"),
+      201: response(auctionActionSuccessSchema, "Auction created"),
       ...errorResponses,
     },
   });
@@ -150,7 +150,7 @@ export function registerOpenApi<Environment extends HonoEnvironment>(
       security: [{ bearerAuth: [] }],
       request: { params: auctionParamsSchema, headers: commandHeadersSchema },
       responses: {
-        200: response(commandSuccessSchema, "Command accepted or replayed"),
+        200: response(auctionActionSuccessSchema, "Action accepted or replayed"),
         ...errorResponses,
       },
     });
@@ -167,7 +167,7 @@ export function registerOpenApi<Environment extends HonoEnvironment>(
       body: { content: { "application/json": { schema: bidInputSchema } } },
     },
     responses: {
-      200: response(commandSuccessSchema, "Bid accepted or replayed"),
+      200: response(auctionActionSuccessSchema, "Bid accepted or replayed"),
       ...errorResponses,
     },
   });

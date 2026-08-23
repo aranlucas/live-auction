@@ -115,7 +115,7 @@ components:
         - bidderToken
         - viewerToken
       additionalProperties: false
-    CommandSuccess:
+    AuctionActionSuccess:
       type: object
       properties:
         ok:
@@ -629,13 +629,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CommandSuccess"
+                $ref: "#/components/schemas/AuctionActionSuccess"
         "201":
           description: Auction created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CommandSuccess"
+                $ref: "#/components/schemas/AuctionActionSuccess"
         "400":
           description: Invalid request
           content:
@@ -879,11 +879,11 @@ paths:
           in: header
       responses:
         "200":
-          description: Command accepted or replayed
+          description: Action accepted or replayed
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CommandSuccess"
+                $ref: "#/components/schemas/AuctionActionSuccess"
         "400":
           description: Invalid request
           content:
@@ -966,11 +966,11 @@ paths:
           in: header
       responses:
         "200":
-          description: Command accepted or replayed
+          description: Action accepted or replayed
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CommandSuccess"
+                $ref: "#/components/schemas/AuctionActionSuccess"
         "400":
           description: Invalid request
           content:
@@ -1053,11 +1053,11 @@ paths:
           in: header
       responses:
         "200":
-          description: Command accepted or replayed
+          description: Action accepted or replayed
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CommandSuccess"
+                $ref: "#/components/schemas/AuctionActionSuccess"
         "400":
           description: Invalid request
           content:
@@ -1149,7 +1149,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CommandSuccess"
+                $ref: "#/components/schemas/AuctionActionSuccess"
         "400":
           description: Invalid request
           content:

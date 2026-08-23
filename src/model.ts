@@ -169,14 +169,14 @@ export const operationFailureSchema = z
   })
   .openapi("Error");
 
-export const commandSuccessSchema = z
+export const auctionActionSuccessSchema = z
   .strictObject({
     ok: z.literal(true),
     auction: auctionViewSchema,
     event: auctionEventSchema,
     replayed: z.boolean(),
   })
-  .openapi("CommandSuccess");
+  .openapi("AuctionActionSuccess");
 
 export const readSuccessSchema = z
   .strictObject({ ok: z.literal(true), auction: auctionViewSchema })
@@ -190,8 +190,8 @@ export const historySuccessSchema = z
   })
   .openapi("HistorySuccess");
 
-export const commandResultSchema = z.discriminatedUnion("ok", [
-  commandSuccessSchema,
+export const auctionActionResultSchema = z.discriminatedUnion("ok", [
+  auctionActionSuccessSchema,
   operationFailureSchema,
 ]);
 
@@ -289,11 +289,11 @@ export type AuctionEventType = AuctionEvent["type"];
 export type EventPayloadByType = {
   [Type in AuctionEventType]: z.infer<(typeof eventPayloadSchemas)[Type]>;
 };
-export type CommandSuccess = z.infer<typeof commandSuccessSchema>;
+export type AuctionActionSuccess = z.infer<typeof auctionActionSuccessSchema>;
 export type ReadSuccess = z.infer<typeof readSuccessSchema>;
 export type HistorySuccess = z.infer<typeof historySuccessSchema>;
 export type OperationFailure = z.infer<typeof operationFailureSchema>;
-export type CommandResult = z.infer<typeof commandResultSchema>;
+export type AuctionActionResult = z.infer<typeof auctionActionResultSchema>;
 export type ReadResult = z.infer<typeof readResultSchema>;
 export type HistoryResult = z.infer<typeof historyResultSchema>;
 export type RealtimeMessage = z.infer<typeof realtimeMessageSchema>;

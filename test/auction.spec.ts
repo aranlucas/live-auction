@@ -3,13 +3,13 @@ import { listDurableObjectIds, runDurableObjectAlarm, runInDurableObject } from 
 import { describe, expect, it } from "vitest";
 import { Auction } from "../src/auction";
 import {
-  commandResultSchema,
+  auctionActionResultSchema,
   demoBidderSessionResultSchema,
   demoSessionResultSchema,
   historyResultSchema,
   operationFailureSchema,
   readResultSchema,
-  type CommandResult,
+  type AuctionActionResult,
   type ReadResult,
 } from "../src/model";
 import { actorHeaders, tokenFor } from "./auth";
@@ -61,8 +61,8 @@ async function createAndStart(id: string, overrides: Record<string, number> = {}
   expect(start.status).toBe(200);
 }
 
-async function readCommand(response: Response): Promise<CommandResult> {
-  return commandResultSchema.parse(await response.json());
+async function readActionResult(response: Response): Promise<AuctionActionResult> {
+  return auctionActionResultSchema.parse(await response.json());
 }
 
 async function readAuction(response: Response): Promise<ReadResult> {
@@ -264,7 +264,7 @@ describe("live auction API", () => {
       body: JSON.stringify({ amountCents: 1_000 }),
     });
     expect(bidResponse.status).toBe(200);
-    const bid = await readCommand(bidResponse);
+    const bid = await readActionResult(bidResponse);
     expect(bid.ok).toBe(true);
     if (!bid.ok) return;
     expect(bid.auction.currentPriceCents).toBe(1_000);
@@ -272,7 +272,7 @@ describe("live auction API", () => {
     expect(bid.auction.leaderId).toBe("bidder-1");
     expect(bid.replayed).toBe(false);
 
-    const newerBid = await readCommand(
+    const newerBid = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
         method: "POST",
         headers: await bidderHeaders("bidder-2", "bid-2"),
@@ -281,7 +281,7 @@ describe("live auction API", () => {
     );
     expect(newerBid.ok && newerBid.auction.currentPriceCents).toBe(1_100);
 
-    const replay = await readCommand(
+    const replay = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
         method: "POST",
         headers: await bidderHeaders("bidder-1", "bid-1"),
@@ -309,7 +309,7 @@ describe("live auction API", () => {
     const id = "bid-validation";
     await createAndStart(id);
 
-    const low = await readCommand(
+    const low = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
         method: "POST",
         headers: await bidderHeaders("bidder-1", "low"),
@@ -324,7 +324,7 @@ describe("live auction API", () => {
       headers: await bidderHeaders("bidder-1", "stable-key"),
       body: JSON.stringify({ amountCents: 1_000 }),
     });
-    const reused = await readCommand(
+    const reused = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
         method: "POST",
         headers: await bidderHeaders("bidder-1", "stable-key"),
@@ -372,7 +372,7 @@ describe("live auction API", () => {
     expect(before.ok).toBe(true);
     if (!before.ok || before.auction.endsAt === null) return;
 
-    const accepted = await readCommand(
+    const accepted = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
         method: "POST",
         headers: await bidderHeaders("bidder-1", "extend-1"),
@@ -391,7 +391,7 @@ describe("live auction API", () => {
   it("replays an accepted bid before lazily closing an overdue auction", async () => {
     const id = "late-idempotent-retry";
     await createAndStart(id);
-    const original = await readCommand(
+    const original = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
         method: "POST",
         headers: await bidderHeaders("retry-bidder", "stable-retry"),
@@ -412,11 +412,11 @@ describe("live auction API", () => {
       body: JSON.stringify({ amountCents: 1_000 }),
     });
     expect(replayResponse.status).toBe(200);
-    const replay = await readCommand(replayResponse);
+    const replay = await readActionResult(replayResponse);
     expect(replay.ok && replay.replayed).toBe(true);
     if (replay.ok && original.ok) expect(replay.auction).toEqual(original.auction);
 
-    const newLateBid = await readCommand(
+    const newLateBid = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
         method: "POST",
         headers: await bidderHeaders("late-bidder", "new-late-command"),
@@ -456,7 +456,7 @@ describe("live auction API", () => {
     const after = await readAuction(await request(`/v1/auctions/${id}`));
     if (after.ok) expect(after.auction.version).toBe(closedVersion);
 
-    const late = await readCommand(
+    const late = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
         method: "POST",
         headers: await bidderHeaders("late", "late-bid"),
@@ -495,7 +495,7 @@ describe("live auction API", () => {
     });
     expect(missingIdempotencyKey.status).toBe(400);
 
-    const earlyClose = await readCommand(
+    const earlyClose = await readActionResult(
       await request(`/v1/auctions/${id}/close`, {
         method: "POST",
         headers: await sellerHeaders("too-soon"),
@@ -552,6 +552,7 @@ describe("live auction API", () => {
     expect(document.paths["/v1/demo-session"]).toBeDefined();
     expect(document.paths["/v1/demo-session/{auctionId}/bidder"]).toBeDefined();
     expect(document.components.schemas.AuctionEvent).toBeDefined();
+    expect(document.components.schemas.AuctionActionSuccess).toBeDefined();
     expect(document.components.securitySchemes.bearerAuth).toBeDefined();
   });
 
@@ -563,13 +564,13 @@ describe("live auction API", () => {
         .exec<{ id: number }>("SELECT id FROM _sql_schema_migrations ORDER BY id")
         .toArray()
         .map((row) => row.id);
-      expect(versions).toEqual([1, 2, 3]);
-      const command = state.storage.sql
+      expect(versions).toEqual([1, 2, 3, 4]);
+      const idempotencyRecord = state.storage.sql
         .exec<{ response_json: string | null }>(
-          "SELECT response_json FROM command_results WHERE command_type = 'start'",
+          "SELECT response_json FROM idempotency_records WHERE action_type = 'start'",
         )
         .one();
-      expect(command.response_json).not.toBeNull();
+      expect(idempotencyRecord.response_json).not.toBeNull();
       expect(() => state.storage.sql.exec("UPDATE auction SET start_price_cents = 0")).toThrow(
         /auction invariant violated/,
       );

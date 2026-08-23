@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { z } from "zod";
 import {
-  commandResultSchema,
+  auctionActionResultSchema,
   demoBidderSessionResultSchema,
   demoSessionResultSchema,
   healthSchema,
@@ -117,7 +117,7 @@ async function createAuction(id: string, body: ReturnType<typeof auctionBody>) {
       headers: await sellerHeaders(),
       body: JSON.stringify(body),
     }),
-    commandResultSchema,
+    auctionActionResultSchema,
     201,
   );
 }
@@ -128,7 +128,7 @@ async function startAuction(id: string, key: string) {
       method: "POST",
       headers: await sellerHeaders(key),
     }),
-    commandResultSchema,
+    auctionActionResultSchema,
     200,
   );
 }
@@ -150,7 +150,7 @@ async function bid(id: string, bidderId: string, key: string, amountCents: numbe
       )} body=${body.slice(0, 300)}`,
     );
   }
-  return { response, result: commandResultSchema.parse(parsed) };
+  return { response, result: auctionActionResultSchema.parse(parsed) };
 }
 
 function webSocketMessages(socket: WebSocket) {
@@ -308,7 +308,7 @@ async function main(): Promise<void> {
           },
           body: JSON.stringify(auctionBody("Instant demo camera")),
         }),
-        commandResultSchema,
+        auctionActionResultSchema,
         201,
       );
       await parseResponse(
@@ -319,7 +319,7 @@ async function main(): Promise<void> {
             "Idempotency-Key": `demo-start-${runId}`,
           },
         }),
-        commandResultSchema,
+        auctionActionResultSchema,
         200,
       );
       const acceptedBid = await parseResponse(
@@ -332,7 +332,7 @@ async function main(): Promise<void> {
           },
           body: JSON.stringify({ amountCents: 1_000 }),
         }),
-        commandResultSchema,
+        auctionActionResultSchema,
         200,
       );
       assert.equal(acceptedBid.ok, true);
@@ -358,7 +358,7 @@ async function main(): Promise<void> {
             },
             body: JSON.stringify({ amountCents: 1_100 + index * 100 }),
           }),
-          commandResultSchema,
+          auctionActionResultSchema,
           200,
         );
       }
@@ -410,7 +410,7 @@ async function main(): Promise<void> {
         headers: await sellerHeaders(),
         body: JSON.stringify(auctionBody("Production integration auction")),
       });
-      const result = await parseResponse(response, commandResultSchema, 200);
+      const result = await parseResponse(response, auctionActionResultSchema, 200);
       assert.equal(result.ok && result.replayed, true);
       return result;
     },
@@ -624,7 +624,7 @@ async function main(): Promise<void> {
         method: "POST",
         headers: await sellerHeaders(`cancel-${runId}`),
       });
-      const result = await parseResponse(response, commandResultSchema, 200);
+      const result = await parseResponse(response, auctionActionResultSchema, 200);
       assert.equal(result.ok && result.auction.state, "CANCELLED");
       const late = await bid(auctionIds.cancelled, "cancel-late", `cancel-late-${runId}`, 1_000);
       assert.equal(late.response.status, 409);

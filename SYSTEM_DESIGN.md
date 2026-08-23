@@ -96,32 +96,33 @@ classDiagram
         +EventPayload payload
         +timestamp occurredAt
     }
-    class CommandReceipt {
+    class IdempotencyRecord {
         +string actorId
         +string idempotencyKey
-        +string fingerprint
+        +string actionType
+        +string requestFingerprint
+        +int eventSequence
         +json originalResponse
     }
 
     Auction "1" *-- "many" Bid
     Auction "1" *-- "many" AuctionEvent
-    Auction "1" *-- "many" CommandReceipt
+    Auction "1" *-- "many" IdempotencyRecord
 ```
 
-`CommandReceipt` is the plain-language name for what the implementation calls a stored
-`CommandResult`. It is not another user action and it is not the current auction state. It is a
-durable retry receipt:
+An `IdempotencyRecord` is not another user action and it is not the current auction state. It is the
+server’s durable memory of one request:
 
 - `actorId + idempotencyKey` identifies one seller action or bid attempt.
 - `fingerprint` records what that request meant, such as “bid 10,000 cents.”
 - `originalResponse` is the exact response produced when that request first committed.
 
 > A client can lose a successful response and retry after other bids have occurred. Returning the
-> current auction would not be an exact retry. I persist a receipt containing the complete original
+> current auction would not be an exact retry. I persist a record containing the complete original
 > response under the actor and idempotency key.
 
 For example, bidder A’s `$100` bid commits but its HTTP response is lost. Bidder B then raises the
-price to `$110`. When bidder A retries the same key, the receipt returns A’s original `$100`
+price to `$110`. When bidder A retries the same key, the idempotency record returns A’s original `$100`
 acceptance with `replayed: true`; it does not pretend A originally bid at the newer price.
 
 Do not add users, products, chat, payments, shipments, and video segments to the main auction
@@ -193,7 +194,7 @@ discussing storage, sockets, video, or payments.
 
 The diagram carries the terminology: the Durable Object is the actor-like stateful owner, the
 incoming arrows are commands, and the accepted/rejected arrow is the immediate reply. A committed
-event is added in complexity 3; the durable retry receipt is added inside storage in complexity 2.
+event is added in complexity 3; the idempotency record is added inside storage in complexity 2.
 
 #### Complexity 2 — Make correctness durable
 
@@ -205,7 +206,7 @@ flowchart LR
 
     subgraph Boundary[Per-auction correctness boundary]
         Auction["Auction Durable Object — sequential state machine"]
-        SQLite["SQLite transaction — auction · bids · events · retry receipts"]
+        SQLite["SQLite transaction — auction · bids · events · idempotency records"]
         Alarm["Durable alarm — authoritative deadline"]
         Auction --- SQLite
         Auction --- Alarm
@@ -220,33 +221,30 @@ winner. The bid, price, event, retry result, and any deadline change commit toge
 
 #### Complexity 3 — Add realtime delivery without weakening correctness
 
-Only after the write path is correct, split bulk WebSocket delivery away from the authority:
+Only after the write path is correct, add the simplest realtime path:
 
 ```mermaid
 flowchart LR
     Bidder[Bidder]
     Viewer[Viewer]
-    Worker[Worker]
+    Worker["Worker — API and realtime gateway"]
     Auction["Auction authority — decides state"]
-
-    subgraph Fanout[Realtime delivery]
-        Shard["Fanout shard — retained events"]
-        Sockets[Hibernating WebSockets]
-        Shard --> Sockets
-    end
+    Sockets[WebSocket connections]
 
     Bidder -->|bid command| Worker --> Auction
-    Auction -->|ordered event after commit| Shard
+    Auction -->|ordered event after commit| Worker
+    Worker --> Sockets
     Sockets -->|snapshot · event · cursor| Bidder
     Sockets -->|snapshot · event · cursor| Viewer
-    Bidder -.->|"reconnect afterSequence=N"| Shard
-    Viewer -.->|"reconnect afterSequence=N"| Shard
+    Bidder -.->|"reconnect afterSequence=N"| Worker
+    Viewer -.->|"reconnect afterSequence=N"| Worker
     Bidder -.->|"large gap: GET /history"| Worker
     Viewer -.->|"large gap: GET /history"| Worker
 ```
 
-The authority still makes every auction decision. Fanout can lag, duplicate, disconnect, or scale
-to more shards without changing the winner.
+The authority still makes every auction decision; realtime delivery only reports committed state.
+Do not add fanout shards to the interview drawing unless audience scale becomes the chosen deep
+dive. The complete production diagram later splits WebSocket delivery into shards.
 
 #### Complexity 4 — Add adjacent product systems
 
@@ -284,14 +282,15 @@ Say this while drawing the authority:
 
 Then distinguish decision making from delivery:
 
-> The authority accepts or rejects bids. Fanout objects only distribute the result. If fanout is slow or unavailable, it must not change the winning bid.
+> The authority accepts or rejects bids. Realtime delivery only distributes the result. If delivery
+> is slow or unavailable, it must not change the winning bid.
 
 After complexity 2, the design is already complete enough to be correct. Complexity 3 makes it
 usable for a live audience, and complexity 4 makes the product boundary explicit. Ask the
 interviewer where they want to go deeper while offering the most important choices:
 
 > The highest-risk areas are simultaneous bids, exact retries, closing at the deadline, and the
-> snapshot-to-WebSocket race. I can start with bid contention and closing unless you prefer fanout
+> snapshot-to-WebSocket race. I can start with bid contention and closing unless you prefer realtime
 > or multi-region latency.
 
 ### 25:00-38:00 — Drive the correctness deep dives
@@ -319,7 +318,9 @@ sequenceDiagram
     DO-->>B: Rejected: BID_TOO_LOW
 ```
 
-The important answer is not merely “single threaded.” The accepted bid, price update, event,idempotency result, and any deadline extension must commit in one storage transaction. No external cache is allowed to decide the current minimum.
+The important answer is not merely “single threaded.” The accepted bid, price update, event,
+idempotency record, and any deadline extension must commit in one storage transaction. No external
+cache is allowed to decide the current minimum.
 
 #### Deep dive 2: the response is lost
 
@@ -329,7 +330,7 @@ sequenceDiagram
     participant A as Bidder A
     participant B as Bidder B
     participant DO as Auction authority
-    participant R as Retry receipts in SQLite
+    participant R as Idempotency records in SQLite
 
     A->>DO: Bid USD 100, key=A-7
     DO->>R: Store fingerprint + exact USD 100 success
@@ -343,7 +344,7 @@ sequenceDiagram
     DO-->>A: Same USD 100 success, replayed=true
 ```
 
-The retry receipt is why A does not receive the current `$110` state as if it were A’s original
+The idempotency record is why A does not receive the current `$110` state as if it were A’s original
 result. Reusing `A-7` with a different amount does not match the stored fingerprint and returns
 `IDEMPOTENCY_KEY_REUSED`.
 
@@ -422,7 +423,7 @@ flowchart TD
     B["2. API contracts — Idempotency-Key on mutations"]
     C["3. Clients → Worker → Auction authority"]
     D["4. SQLite + alarm inside authority"]
-    E["5. Committed events → fanout → WebSockets"]
+    E["5. Committed events → WebSockets"]
     F["6. Video on a separate lane"]
     G["7. Closed event → workflow → settlement"]
     H["8. Sequence numbers + reconnect cursor"]
@@ -531,7 +532,7 @@ The principal invariants are:
 - `Auction`: seller, prices, state, leader, winner, bid count, configuration, timestamps, and version.
 - `Bid`: server-generated ID, bidder, amount, accepted timestamp, and sequence.
 - `AuctionEvent`: discriminated type and payload, actor, time, and authoritative sequence.
-- `CommandReceipt`: the durable retry receipt called `CommandResult` in the implementation; it stores actor, idempotency key, request fingerprint, event sequence, and the exact original response JSON.
+- `IdempotencyRecord`: actor, idempotency key, action type, request fingerprint, event sequence, and the exact original response JSON used to replay a request safely.
 - `FanoutMessage`: resulting snapshot, event, and cursor retained on one delivery shard.
 
 Important API choices:
@@ -573,7 +574,7 @@ flowchart LR
 
     subgraph Authority[Per-auction correctness boundary]
         AuctionDO["Auction Durable Object — sole sequencer"]
-        SQLite["SQLite — auction · bids · events · retry receipts · migrations · constraints"]
+        SQLite["SQLite — auction · bids · events · idempotency records · migrations · constraints"]
         Alarm[Transactional deadline alarm]
         AuctionDO --- SQLite
         AuctionDO --- Alarm
@@ -634,14 +635,14 @@ sequenceDiagram
     C->>W: POST /bids + JWT + Idempotency-Key
     W->>W: Authenticate and validate with Zod
     W->>A: placeBid(actor, key, amount)
-    A->>DB: Find command by actor + key
+    A->>DB: Find idempotency record by actor + key
     alt Exact retry
         DB-->>A: Original stored response
         A-->>W: replayed = true
-    else New command
+    else New request
         A->>DB: Transaction: validate state and deadline
         A->>DB: Insert bid + update price and leader
-        A->>DB: Insert event + exact retry receipt
+        A->>DB: Insert event + idempotency record
         A->>DB: Update alarm if anti-snipe extends deadline
         DB-->>A: Commit
         A-->>F: Publish ordered event asynchronously after commit
@@ -652,7 +653,7 @@ sequenceDiagram
 
 1. Rate limiting and validation occur before the authority lookup.
 2. The object checks the `(actor, idempotency key)` record first. If its fingerprint matches, it returns the stored original response—even if later bids occurred or the deadline passed.
-3. Otherwise, inside one synchronous storage transaction it checks state/time, calculates the minimum, inserts the bid, updates auction state, records the typed event, stores the exact retry receipt, and changes the alarm if extended.
+3. Otherwise, inside one synchronous storage transaction it checks state/time, calculates the minimum, inserts the bid, updates auction state, records the typed event, stores the idempotency record, and changes the alarm if extended.
 4. Database triggers independently reject impossible price/state/sequence combinations.
 5. After commit, the authority publishes the resulting event/snapshot to four fanout shards.
 
@@ -715,7 +716,7 @@ Every message has the authority's sequence. Clients persist the latest cursor, i
 | Accepted response is lost          | Retry same key; receive the exact original snapshot and event.       |
 | Same key has different input       | Fingerprint mismatch returns `IDEMPOTENCY_KEY_REUSED`.               |
 | Equal bids race                    | Single authority serializes them; only the first meets the minimum.  |
-| Authority evicts/restarts          | SQLite, alarm, and retry receipts restore all correctness state.     |
+| Authority evicts/restarts          | SQLite, alarm, and idempotency records restore correctness state.    |
 | Alarm retries or is delayed        | Close is idempotent; reads/bids also close overdue state.            |
 | Fanout publish fails               | Bid remains committed; client snapshot/history repairs delivery.     |
 | Socket drops during bootstrap      | Reconnect cursor repeats safely and closes the subscribe gap.        |

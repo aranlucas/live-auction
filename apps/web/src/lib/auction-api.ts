@@ -1,13 +1,13 @@
 import { z } from "zod";
 import {
-  commandResultSchema,
+  auctionActionResultSchema,
   createAuctionInputSchema,
   demoBidderSessionResultSchema,
   demoSessionResultSchema,
   historyResultSchema,
   operationFailureSchema,
   readResultSchema,
-  type CommandResult,
+  type AuctionActionResult,
   type CreateAuctionInput,
   type HistoryResult,
   type ReadResult,
@@ -146,8 +146,8 @@ export function readHistory(config: TestRoomConfig, token: string): Promise<Hist
 export function createAuction(
   config: TestRoomConfig,
   input: CreateAuctionInput = defaultAuctionInput,
-): Promise<CommandResult> {
-  return request(commandResultSchema, endpoint(config), config.sellerToken, {
+): Promise<AuctionActionResult> {
+  return request(auctionActionResultSchema, endpoint(config), config.sellerToken, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(createAuctionInputSchema.parse(input)),
@@ -157,15 +157,18 @@ export function createAuction(
 export function command(
   config: TestRoomConfig,
   action: "start" | "close" | "cancel",
-): Promise<CommandResult> {
-  return request(commandResultSchema, endpoint(config, `/${action}`), config.sellerToken, {
+): Promise<AuctionActionResult> {
+  return request(auctionActionResultSchema, endpoint(config, `/${action}`), config.sellerToken, {
     method: "POST",
     headers: { "Idempotency-Key": `${action}-${crypto.randomUUID()}` },
   });
 }
 
-export function placeBid(config: TestRoomConfig, amountCents: number): Promise<CommandResult> {
-  return request(commandResultSchema, endpoint(config, "/bids"), config.bidderToken, {
+export function placeBid(
+  config: TestRoomConfig,
+  amountCents: number,
+): Promise<AuctionActionResult> {
+  return request(auctionActionResultSchema, endpoint(config, "/bids"), config.bidderToken, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
