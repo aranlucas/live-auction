@@ -28,7 +28,7 @@
     "jose": "^6.2.10",
     "lucide-react": "^1.33.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react-dom": "^19.3.0",
     "react-use-websocket": "^4.13.0",
     "sonner": "^2.0.8",
     "zod": "^4.4.3"
@@ -38,7 +38,7 @@
     "@tanstack/router-cli": "^1.167.33",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.0.1",
     "typescript": "^7.0.2",
     "vite": "^8.0.0",
