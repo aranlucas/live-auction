@@ -1,0 +1,32 @@
+name: Workflow syntax
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/**
+      - .github/dependabot.yml
+      - .github/dependabot.yaml
+  push:
+    paths:
+      - .github/workflows/**
+      - .github/dependabot.yml
+      - .github/dependabot.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-syntax-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate GitHub Actions workflows
+        uses: docker://rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        with:
+          args: -color
