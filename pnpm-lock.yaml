@@ -10,13 +10,13 @@ importers:
     dependencies:
       '@hono/zod-openapi':
         specifier: ^1.6.3
-        version: 1.6.3(hono@4.13.3)(zod@4.4.3)
+        version: 1.6.3(hono@4.13.8)(zod@4.4.3)
       '@hono/zod-validator':
         specifier: 0.9.0
-        version: 0.9.0(hono@4.13.3)(zod@4.4.3)
+        version: 0.9.0(hono@4.13.8)(zod@4.4.3)
       hono:
-        specifier: 4.13.3
-        version: 4.13.3
+        specifier: 4.13.8
+        version: 4.13.8
       jose:
         specifier: ^6.2.10
         version: 6.2.10
@@ -1933,8 +1933,8 @@ packages:
       crossws:
         optional: true
 
-  hono@4.13.3:
-    resolution: {integrity: sha512-r8AO2mYHoLxSHkgafNeC/BXyb2vWRxD3jem4Ts+ptav8oTG5FIRifAjuJEmZI4bSvvc2ns0GxmIYiZnHqN3mMw==}
+  hono@4.13.8:
+    resolution: {integrity: sha512-/Gng7NfoykZl2pjukW5Z6+8Yxm3BPRf86GTbQnt0SbySkvax4fyL4H3HhY1cCpBGmiW9XDRFzRV+CXK2W8QudQ==}
     engines: {node: '>=16.9.0'}
 
   is-fullwidth-code-point@3.0.0:
@@ -2829,22 +2829,22 @@ snapshots:
   '@esbuild/win32-x64@0.28.1':
     optional: true
 
-  '@hono/zod-openapi@1.6.3(hono@4.13.3)(zod@4.4.3)':
+  '@hono/zod-openapi@1.6.3(hono@4.13.8)(zod@4.4.3)':
     dependencies:
       '@asteasolutions/zod-to-openapi': 9.1.0(zod@4.4.3)
-      '@hono/zod-validator': 0.9.1(hono@4.13.3)(zod@4.4.3)
-      hono: 4.13.3
+      '@hono/zod-validator': 0.9.1(hono@4.13.8)(zod@4.4.3)
+      hono: 4.13.8
       openapi3-ts: 4.6.1
       zod: 4.4.3
 
-  '@hono/zod-validator@0.9.0(hono@4.13.3)(zod@4.4.3)':
+  '@hono/zod-validator@0.9.0(hono@4.13.8)(zod@4.4.3)':
     dependencies:
-      hono: 4.13.3
+      hono: 4.13.8
       zod: 4.4.3
 
-  '@hono/zod-validator@0.9.1(hono@4.13.3)(zod@4.4.3)':
+  '@hono/zod-validator@0.9.1(hono@4.13.8)(zod@4.4.3)':
     dependencies:
-      hono: 4.13.3
+      hono: 4.13.8
       zod: 4.4.3
 
   '@img/colour@1.1.0': {}
@@ -3986,7 +3986,7 @@ snapshots:
       rou3: 0.8.1
       srvx: 0.11.22
 
-  hono@4.13.3: {}
+  hono@4.13.8: {}
 
   is-fullwidth-code-point@3.0.0: {}
 
