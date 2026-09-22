@@ -4,6 +4,7 @@
     "openapi.yaml",
     "worker-configuration.d.ts",
     ".playwright-cli/**",
-    "output/playwright/**"
+    "output/playwright/**",
+    "apps/web/src/routeTree.gen.ts"
   ]
 }
