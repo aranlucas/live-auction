@@ -9,3 +9,6 @@ coverage/
 artifacts/
 .playwright-cli/
 output/playwright/
+
+# Cloudflare CLI build output and generated types
+.cloudflare/

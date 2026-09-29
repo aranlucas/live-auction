@@ -20,3 +20,5 @@ pnpm check
 ```
 
 See [`apps/web/README.md`](apps/web/README.md) for web-client details. Keep auction signing keys in Worker secrets, never in Git.
+
+See [Cloudflare CLI migration](CF_MIGRATION.md) for cf deployment and compatibility details.
