@@ -26,3 +26,8 @@ Vite builds, workspace roots, or OpenNext would otherwise bypass Worker packagin
 This produces cf’s Build Output Specification for `cf deploy --prebuilt`.
 D1 migration directories remain configured in the retained Wrangler inputs used
 by the existing database scripts.
+
+`pnpm dev` also selects the Wrangler backend explicitly with
+`--experimental-new-config`, so local development reads `cloudflare.config.ts`
+and `wrangler.config.ts`. The cf beta's application autodetection rejects this
+workspace root before it can start the backend Worker.
