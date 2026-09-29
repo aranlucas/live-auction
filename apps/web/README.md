@@ -63,4 +63,4 @@ pnpm --filter gavel-live-web deploy
 ```
 
 The accepted visual concept is [`design/gavel-live-concept.png`](./design/gavel-live-concept.png).
-The production Worker name is configured as `gavel-live-web` in `wrangler.jsonc`.
+The production Worker name is configured as `gavel-live-web` in `cloudflare.config.ts`.
