@@ -9,13 +9,14 @@
     "dev": "vite dev --port 3000",
     "generate-routes": "tsr generate",
     "build": "vite build && tsc --noEmit",
-    "lint": "oxlint --deny-warnings --type-aware src vite.config.ts",
+    "lint": "oxlint --deny-warnings --type-aware src test vite.config.ts vitest.config.ts",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "deploy": "pnpm run build && cf deploy --prebuilt",
     "deploy:dry-run": "pnpm run build && cf deploy --prebuilt --dry-run",
     "types": "wrangler types",
-    "types:check": "wrangler types --check"
+    "types:check": "wrangler types --check",
+    "test": "vitest run"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",
@@ -41,6 +42,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "cf": "1.0.0-beta.10",
+    "happy-dom": "20.14.5",
     "typescript": "^7.0.2",
     "vite": "^8.0.0",
     "wrangler": "^4.143.0"
