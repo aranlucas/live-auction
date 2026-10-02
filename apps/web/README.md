@@ -55,12 +55,17 @@ URL shown in Setup. The included development signing key is for this system-desi
 ## Verify and deploy
 
 ```bash
+pnpm --filter gavel-live-web test
 pnpm --filter gavel-live-web typecheck
 pnpm --filter gavel-live-web lint
 pnpm --filter gavel-live-web build
 pnpm --filter gavel-live-web deploy:dry-run
 pnpm --filter gavel-live-web deploy
 ```
+
+The web tests exercise the real room hook with scripted local HTTP and WebSocket transports.
+They cover reordered snapshots, room and credential changes, and cancelled reads without
+contacting the staging API. The root `pnpm test` runs both backend and web suites.
 
 The accepted visual concept is [`design/gavel-live-concept.png`](./design/gavel-live-concept.png).
 The production Worker name is configured as `gavel-live-web` in `cloudflare.config.ts`.

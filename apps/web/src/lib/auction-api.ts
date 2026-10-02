@@ -132,15 +132,23 @@ async function request<T>(
   return result;
 }
 
-export function readAuction(config: TestRoomConfig, token: string): Promise<ReadResult> {
-  return request(readResultSchema, endpoint(config), token);
+export function readAuction(
+  config: TestRoomConfig,
+  token: string,
+  signal?: AbortSignal,
+): Promise<ReadResult> {
+  return request(readResultSchema, endpoint(config), token, { signal });
 }
 
-export function readHistory(config: TestRoomConfig, token: string): Promise<HistoryResult> {
+export function readHistory(
+  config: TestRoomConfig,
+  token: string,
+  signal?: AbortSignal,
+): Promise<HistoryResult> {
   const url = endpoint(config, "/history");
   url.searchParams.set("afterSequence", "0");
   url.searchParams.set("limit", "100");
-  return request(historyResultSchema, url, token);
+  return request(historyResultSchema, url, token, { signal });
 }
 
 export function createAuction(

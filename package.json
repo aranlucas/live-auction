@@ -19,7 +19,7 @@
     "lint": "oxlint --deny-warnings --type-aware src test scripts vitest.config.ts && pnpm --filter gavel-live-web lint",
     "openapi": "tsx scripts/openapi.ts",
     "openapi:check": "tsx scripts/openapi.ts --check",
-    "test": "vitest run",
+    "test": "vitest run && pnpm --filter gavel-live-web test",
     "test:production": "tsx scripts/production-integration.ts",
     "typecheck": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit",
     "types": "wrangler types",
