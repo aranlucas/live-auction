@@ -1,4 +1,4 @@
-import { Radio, UsersRound } from "lucide-react";
+import { Image as ImageIcon, UsersRound } from "lucide-react";
 import type { AuctionView } from "cloudflare-live-auction/model";
 
 interface LiveStageProps {
@@ -7,16 +7,16 @@ interface LiveStageProps {
 
 export function LiveStage({ auction }: LiveStageProps) {
   return (
-    <section className="live-stage" aria-label="Livestream stage">
+    <section className="live-stage" aria-label="Auction stage">
       <img
         src="/host-camera-shop.png"
-        alt="A vintage camera seller presenting a silver rangefinder camera"
+        alt="Demo still of a camera seller presenting a silver rangefinder camera"
       />
       <div className="stage-scrim" />
       <div className="stage-topline">
-        <span className="live-label">
-          <Radio size={14} fill="currentColor" />
-          Live
+        <span className="stage-preview-label">
+          <ImageIcon size={14} />
+          Demo still
         </span>
         <span className="stage-context">
           <UsersRound size={15} />

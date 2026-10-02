@@ -219,7 +219,7 @@ export function AuctionRoomPage({
         onOpenSetup={() => setSetupOpen(true)}
       />
 
-      <main className="room-layout" id="room">
+      <main className="room-layout" id="room" tabIndex={-1}>
         <div className="stage-column">
           <LiveStage auction={room.auction} />
           <ActivityFeed events={room.events} />
