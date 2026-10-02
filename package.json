@@ -9,7 +9,7 @@
   "scripts": {
     "auth:keygen": "tsx scripts/auth-keygen.ts",
     "auth:token": "tsx scripts/auth-token.ts",
-    "check": "pnpm types:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm openapi:check && pnpm test && pnpm --filter gavel-live-web build && pnpm --filter gavel-live-web deploy:dry-run && pnpm deploy:dry-run",
+    "check": "pnpm types:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm openapi:check && pnpm test && pnpm --filter gavel-live-web build && pnpm --filter gavel-live-web test:render && pnpm --filter gavel-live-web deploy:dry-run && pnpm deploy:dry-run",
     "deploy": "pnpm build:worker && cf deploy --prebuilt",
     "deploy:dry-run": "pnpm build:worker && cf deploy --prebuilt --dry-run && pnpm build:worker --env staging && cf deploy --prebuilt --dry-run --mode staging",
     "deploy:staging": "pnpm build:worker --env staging && cf deploy --prebuilt --mode staging",
