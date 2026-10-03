@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { z } from "zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 // The package's public entry point is CommonJS and Vite 8/Rolldown currently wraps its default
 // export as a namespace in production. Use the package's named compiled modules until it publishes
@@ -29,10 +30,12 @@ const connectionLabels: Record<ReadyState, string> = {
 export function useAuctionRoom(config: TestRoomConfig) {
   const queryClient = useQueryClient();
   const readToken = bestReadToken(config);
+
   const queryKey = useMemo(
     () => ["auction", config.apiBaseUrl, config.auctionId, readToken] as const,
     [config.apiBaseUrl, config.auctionId, readToken],
   );
+
   const historyKey = useMemo(
     () => ["auction-history", config.apiBaseUrl, config.auctionId, readToken] as const,
     [config.apiBaseUrl, config.auctionId, readToken],
@@ -46,6 +49,7 @@ export function useAuctionRoom(config: TestRoomConfig) {
     structuralSharing: (previous, incoming) => {
       const current = readResultSchema.safeParse(previous);
       const next = readResultSchema.parse(incoming);
+
       return current.success &&
         current.data.ok &&
         next.ok &&
@@ -57,6 +61,7 @@ export function useAuctionRoom(config: TestRoomConfig) {
     enabled: Boolean(readToken && config.auctionId),
     refetchInterval: 10_000,
   });
+
   const historyQuery = useQuery({
     queryKey: historyKey,
     queryFn: ({ signal }) => readHistory(config, readToken, signal),
@@ -68,29 +73,33 @@ export function useAuctionRoom(config: TestRoomConfig) {
     () => (readToken && config.auctionId && auctionQuery.data?.ok ? realtimeUrl(config) : null),
     [auctionQuery.data?.ok, config, readToken],
   );
+
   // The socket library keys connections by URL, not protocols. A URL function also
   // changes identity when credentials change, including when the next query is cached.
   const socketEndpoint = useMemo(
     () => (socketUrl ? () => socketUrl : null),
     [socketUrl, readToken],
   );
+
   const { readyState, getWebSocket } = useWebSocket(socketEndpoint, {
     onMessage: (message) => {
       // A retained lastMessage must never be replayed into another room's query key.
       const socket = getWebSocket();
-      if (
-        message.target !== socket ||
-        socket?.readyState !== ReadyState.OPEN ||
-        typeof message.data !== "string"
-      )
+
+      const payload = z.string().safeParse(message.data);
+
+      if (message.target !== socket || socket?.readyState !== ReadyState.OPEN || !payload.success)
         return;
       let value: unknown;
+
       try {
-        value = JSON.parse(message.data);
+        value = JSON.parse(payload.data);
       } catch {
         return;
       }
+
       const parsed = realtimeMessageSchema.safeParse(value);
+
       if (!parsed.success || parsed.data.auction.id !== config.auctionId) return;
       queryClient.setQueryData(
         queryKey,

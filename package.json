@@ -16,7 +16,7 @@
     "dev": "wrangler dev --experimental-new-config",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "lint": "oxlint --deny-warnings --type-aware src test scripts vitest.config.ts && pnpm --filter gavel-live-web lint",
+    "lint": "oxlint --deny-warnings --type-aware src test scripts vitest.config.ts && pnpm --filter gavel-live-web lint && pnpm lint:anti-slop",
     "openapi": "tsx scripts/openapi.ts",
     "openapi:check": "tsx scripts/openapi.ts --check",
     "test": "vitest run && pnpm --filter gavel-live-web test",
@@ -24,7 +24,8 @@
     "typecheck": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit",
     "types": "wrangler types",
     "types:check": "wrangler types --check",
-    "build:worker": "wrangler build --experimental-new-config --experimental-cf-build-output"
+    "build:worker": "wrangler build --experimental-new-config --experimental-cf-build-output",
+    "lint:anti-slop": "oxlint ."
   },
   "dependencies": {
     "@hono/zod-openapi": "^1.6.3",
@@ -35,10 +36,11 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.3.1",
+    "@oxlint/plugins": "1.79.0",
     "@types/node": "26.2.0",
     "cf": "1.0.0-beta.10",
     "oxfmt": "^0.70.0",
-    "oxlint": "^1.79.0",
+    "oxlint": "1.79.0",
     "oxlint-tsgolint": "^7.0.2003",
     "tsx": "4.23.15",
     "typescript": "7.0.2",

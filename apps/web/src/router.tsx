@@ -11,6 +11,7 @@ export function getRouter() {
       },
     },
   });
+
   const router = createTanStackRouter({
     routeTree,
     scrollRestoration: true,

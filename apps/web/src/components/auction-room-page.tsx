@@ -34,6 +34,7 @@ type RoomAction =
   | { type: "command"; action: "start" | "close" | "cancel" };
 
 const storageKey = "gavel-live:test-room";
+
 const SetupDialog = lazy(() =>
   import("#/components/setup-dialog").then((module) => ({
     default: module.SetupDialog,
@@ -47,11 +48,13 @@ export function AuctionRoomPage({
 }: AuctionRoomPageProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
   const [config, setConfig] = useState<TestRoomConfig>(() => ({
     ...defaultRoomConfig,
-    ...(routeApiBaseUrl ? { apiBaseUrl: routeApiBaseUrl } : {}),
-    ...(routeAuctionId ? { auctionId: routeAuctionId } : {}),
+    apiBaseUrl: routeApiBaseUrl || defaultRoomConfig.apiBaseUrl,
+    auctionId: routeAuctionId || defaultRoomConfig.auctionId,
   }));
+
   const [setupOpen, setSetupOpen] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
   const autoJoinStarted = useRef(false);
@@ -85,49 +88,61 @@ export function AuctionRoomPage({
   useEffect(() => {
     const routeConfig: TestRoomConfig = {
       ...defaultRoomConfig,
-      ...(routeApiBaseUrl ? { apiBaseUrl: routeApiBaseUrl } : {}),
-      ...(routeAuctionId ? { auctionId: routeAuctionId } : {}),
-      ...(autoJoin ? { sellerToken: "", bidderToken: "", viewerToken: "" } : {}),
+      apiBaseUrl: routeApiBaseUrl || defaultRoomConfig.apiBaseUrl,
+      auctionId: routeAuctionId || defaultRoomConfig.auctionId,
+      sellerToken: autoJoin ? "" : defaultRoomConfig.sellerToken,
+      bidderToken: autoJoin ? "" : defaultRoomConfig.bidderToken,
+      viewerToken: autoJoin ? "" : defaultRoomConfig.viewerToken,
     };
 
     if (autoJoin) {
       setConfig(routeConfig);
       setStorageReady(true);
+
       return;
     }
 
     const stored = window.sessionStorage.getItem(storageKey);
+
     if (!stored) {
       setConfig(routeConfig);
       setStorageReady(true);
+
       return;
     }
 
     try {
       const parsed = testRoomConfigSchema.parse(JSON.parse(stored));
+
       if (routeAuctionId && parsed.auctionId !== routeAuctionId) {
         setConfig(routeConfig);
       } else {
         const nextConfig = {
           ...parsed,
-          ...(routeApiBaseUrl ? { apiBaseUrl: routeApiBaseUrl } : {}),
-          ...(routeAuctionId ? { auctionId: routeAuctionId } : {}),
+          apiBaseUrl: routeApiBaseUrl || parsed.apiBaseUrl,
+          auctionId: routeAuctionId || parsed.auctionId,
         };
+
         setConfig(nextConfig);
+
         if (!routeAuctionId) navigateToAuction(nextConfig);
       }
     } catch {
       window.sessionStorage.removeItem(storageKey);
       setConfig(routeConfig);
     }
+
     setStorageReady(true);
   }, [autoJoin, navigateToAuction, routeApiBaseUrl, routeAuctionId]);
 
   const room = useAuctionRoom(config);
+
   const mutation = useMutation({
     mutationFn: async (action: RoomAction) => {
       if (action.type === "create") return createAuction(config);
+
       if (action.type === "bid") return placeBid(config, action.amountCents);
+
       return command(config, action.action);
     },
     onSuccess: async (result) => {
@@ -144,6 +159,7 @@ export function AuctionRoomPage({
       saveConfig(nextConfig);
       await createAuction(nextConfig);
       await command(nextConfig, "start");
+
       return nextConfig;
     },
     onSuccess: async () => {
@@ -159,6 +175,7 @@ export function AuctionRoomPage({
       const auctionId = routeAuctionId ?? config.auctionId;
       const nextConfig = await requestDemoBidderSession(config.apiBaseUrl, auctionId);
       saveConfig(nextConfig);
+
       return nextConfig;
     },
     onSuccess: async (nextConfig) => {
@@ -172,6 +189,7 @@ export function AuctionRoomPage({
   const launchDemo = async () => {
     try {
       await launchMutation.mutateAsync();
+
       return true;
     } catch {
       return false;
@@ -181,6 +199,7 @@ export function AuctionRoomPage({
   const joinDemo = async () => {
     try {
       await joinMutation.mutateAsync();
+
       return true;
     } catch {
       return false;
@@ -198,10 +217,14 @@ export function AuctionRoomPage({
       ? mutation.variables.action
       : mutation.variables.type
     : null;
+
   const queryError = room.auctionQuery.error;
+
   const isMissing =
     queryError instanceof Error && queryError.message.toLowerCase().includes("not found");
+
   const isDemoAuction = (routeAuctionId ?? room.auction?.id)?.startsWith("demo-") ?? false;
+
   const additionalBidderUrl = room.auction?.id.startsWith("demo-")
     ? `/auctions/${encodeURIComponent(room.auction.id)}/join${
         config.apiBaseUrl === defaultRoomConfig.apiBaseUrl

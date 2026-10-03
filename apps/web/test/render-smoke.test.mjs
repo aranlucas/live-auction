@@ -5,7 +5,9 @@ import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 let preview;
+
 let baseUrl = process.env.GAVEL_RENDER_BASE_URL;
+
 let output = "";
 
 before(async () => {
@@ -25,22 +27,28 @@ before(async () => {
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
+
     for (const stream of [preview.stdout, preview.stderr]) {
       stream.on("data", (chunk) => {
         output = (output + String(chunk)).slice(-16000);
       });
     }
   }
+
   const deadline = Date.now() + 20000;
+
   while (Date.now() < deadline) {
     try {
       await fetch(baseUrl, { signal: AbortSignal.timeout(1000) });
+
       return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
+
     if (preview?.exitCode !== null && preview?.exitCode !== undefined) break;
   }
+
   throw new Error(`Local preview did not start.\n${output}`);
 });
 

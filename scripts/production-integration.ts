@@ -1,3 +1,5 @@
+type AuthHeaders = { "Content-Type": string; Authorization: string; "Idempotency-Key"?: string };
+
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -22,13 +24,16 @@ interface CheckResult {
 }
 
 const cliArguments = process.argv.slice(2).filter((argument) => argument !== "--");
+
 const suppliedBaseUrl =
   cliArguments.find((argument) => !argument.startsWith("--")) ?? process.env.AUCTION_BASE_URL;
+
 if (!suppliedBaseUrl) {
   throw new Error("Pass the deployed Worker URL or set AUCTION_BASE_URL");
 }
 
 const reportArgument = cliArguments.find((argument) => argument.startsWith("--report="));
+
 const reportPath = cliArguments.includes("--no-report")
   ? undefined
   : resolve(
@@ -38,14 +43,18 @@ const reportPath = cliArguments.includes("--no-report")
     );
 
 const baseUrl = new URL(suppliedBaseUrl);
+
 const runId = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+
 const auctionIds = {
   live: `integration-live-${runId}`,
   cancelled: `integration-cancelled-${runId}`,
   alarm: `integration-alarm-${runId}`,
   missing: `integration-missing-${runId}`,
 };
+
 const checks: CheckResult[] = [];
+
 let activeSocket: WebSocket | undefined;
 
 const authOptions = {
@@ -53,13 +62,19 @@ const authOptions = {
   audience: process.env.AUCTION_AUTH_AUDIENCE ?? "cloudflare-live-auction",
   privateJwkPath: process.env.AUCTION_AUTH_PRIVATE_JWK ?? ".auction-auth-private.jwk",
 };
+
 const defaultViewerToken = issueToken("integration-viewer", "viewer", authOptions);
 
-const sellerHeaders = async (key?: string): Promise<Record<string, string>> => ({
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${await issueToken("integration-seller", "seller", authOptions)}`,
-  ...(key ? { "Idempotency-Key": key } : {}),
-});
+const sellerHeaders = async (key?: string): Promise<Record<string, string>> => {
+  const headers: AuthHeaders = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${await issueToken("integration-seller", "seller", authOptions)}`,
+  };
+
+  if (key) headers["Idempotency-Key"] = key;
+
+  return headers;
+};
 
 const bidderHeaders = async (bidderId: string, key: string): Promise<Record<string, string>> => ({
   "Content-Type": "application/json",
@@ -90,14 +105,17 @@ async function check<T>(name: string, operation: () => Promise<T>, detail: (valu
     durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
     detail: detail(value),
   });
+
   return value;
 }
 
 async function api(path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers);
+
   if (path.startsWith("/v1/auctions/") && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${await defaultViewerToken}`);
   }
+
   return fetch(new URL(path, baseUrl), { ...init, headers });
 }
 
@@ -107,6 +125,7 @@ async function parseResponse<T>(
   expectedStatus: number,
 ): Promise<T> {
   assert.equal(response.status, expectedStatus, `${response.url} returned ${response.status}`);
+
   return schema.parse(await response.json());
 }
 
@@ -139,8 +158,10 @@ async function bid(id: string, bidderId: string, key: string, amountCents: numbe
     headers: await bidderHeaders(bidderId, key),
     body: JSON.stringify({ amountCents }),
   });
+
   const body = await response.text();
   let parsed: unknown;
+
   try {
     parsed = JSON.parse(body);
   } catch {
@@ -150,6 +171,7 @@ async function bid(id: string, bidderId: string, key: string, amountCents: numbe
       )} body=${body.slice(0, 300)}`,
     );
   }
+
   return { response, result: auctionActionResultSchema.parse(parsed) };
 }
 
@@ -159,18 +181,23 @@ function webSocketMessages(socket: WebSocket) {
   socket.addEventListener("message", (event) => {
     const message = String(event.data);
     const resolve = waiting.shift();
+
     if (resolve) resolve(message);
     else queued.push(message);
   });
+
   return {
     next(timeoutMs = 5_000): Promise<string> {
       const queuedMessage = queued.shift();
+
       if (queuedMessage !== undefined) return Promise.resolve(queuedMessage);
+
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(
           () => reject(new Error("Timed out waiting for production WebSocket message")),
           timeoutMs,
         );
+
         waiting.push((message) => {
           clearTimeout(timeout);
           resolve(message);
@@ -191,15 +218,18 @@ function waitForOpen(socket: WebSocket): Promise<void> {
 
 async function pollUntilClosed(id: string, timeoutMs = 12_000) {
   const deadline = Date.now() + timeoutMs;
+
   while (Date.now() < deadline) {
     const state = readResultSchema.parse(await (await api(`/v1/auctions/${id}`)).json());
+
     if (state.ok && state.auction.state === "CLOSED") return state;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
+
   throw new Error(`Auction ${id} did not close before the integration timeout`);
 }
 
-function escapeHtml(value: unknown): string {
+function escapeHtml(value: string | number): string {
   return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -224,6 +254,7 @@ async function writeIntegrationReport(summary: {
 }): Promise<string | undefined> {
   if (!reportPath) return undefined;
   const maximumDuration = Math.max(...summary.checks.map((item) => item.durationMs), 1);
+
   const checkCards = summary.checks
     .map(
       (item) => `<li class="check">
@@ -233,6 +264,7 @@ async function writeIntegrationReport(summary: {
       </li>`,
     )
     .join("");
+
   const timelineItems = summary.timeline
     .map(
       (item) => `<li class="event">
@@ -241,6 +273,7 @@ async function writeIntegrationReport(summary: {
       </li>`,
     )
     .join("");
+
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,">
 <title>Live Auction integration report</title>
@@ -253,8 +286,10 @@ async function writeIntegrationReport(summary: {
 <section><h2>Authoritative event timeline</h2><ol class="timeline">${timelineItems}</ol></section>
 <section class="footer">Auction ${escapeHtml(summary.auctionIds.live)} · Generated ${escapeHtml(new Date().toISOString())}</section>
 </main></body></html>`;
+
   await mkdir(dirname(reportPath), { recursive: true });
   await writeFile(reportPath, html, "utf8");
+
   return reportPath;
 }
 
@@ -263,11 +298,14 @@ async function main(): Promise<void> {
     "health endpoint",
     async () => {
       const requestId = crypto.randomUUID();
+
       const response = await api("/health", {
         headers: { "X-Request-Id": requestId },
       });
+
       assert.equal(response.status, 200);
       assert.equal(response.headers.get("X-Request-Id"), requestId);
+
       return healthSchema.parse(await response.json());
     },
     (health) => `${health.service} (${health.environment}), correlated request`,
@@ -278,6 +316,7 @@ async function main(): Promise<void> {
     async () => {
       const response = await api("/openapi.json");
       assert.equal(response.status, 200);
+
       return z
         .object({
           openapi: z.literal("3.1.0"),
@@ -292,6 +331,7 @@ async function main(): Promise<void> {
     "instant demo room",
     async () => {
       const sessionResponse = await api("/v1/demo-session", { method: "POST" });
+
       if (health.environment !== "staging") {
         return parseResponse(sessionResponse, operationFailureSchema, 404);
       }
@@ -322,6 +362,7 @@ async function main(): Promise<void> {
         auctionActionResultSchema,
         200,
       );
+
       const acceptedBid = await parseResponse(
         await api(`/v1/auctions/${session.auctionId}/bids`, {
           method: "POST",
@@ -335,18 +376,24 @@ async function main(): Promise<void> {
         auctionActionResultSchema,
         200,
       );
+
       assert.equal(acceptedBid.ok, true);
+
       const joinedBidders = await Promise.all(
         [0, 1].map(async () => {
           const response = await api(`/v1/demo-session/${session.auctionId}/bidder`, {
             method: "POST",
           });
+
           const result = await parseResponse(response, demoBidderSessionResultSchema, 201);
           assert.equal(result.ok, true);
+
           return result;
         }),
       );
+
       assert.notEqual(joinedBidders[0].bidderId, joinedBidders[1].bidderId);
+
       for (const [index, bidder] of joinedBidders.entries()) {
         await parseResponse(
           await api(`/v1/auctions/${session.auctionId}/bids`, {
@@ -362,6 +409,7 @@ async function main(): Promise<void> {
           200,
         );
       }
+
       const mismatch = await parseResponse(
         await api(`/v1/auctions/demo-mismatch-${runId}`, {
           headers: { Authorization: `Bearer ${session.viewerToken}` },
@@ -369,7 +417,9 @@ async function main(): Promise<void> {
         operationFailureSchema,
         403,
       );
+
       assert.equal(mismatch.error.code, "AUCTION_SCOPE_MISMATCH");
+
       return session;
     },
     (result) =>
@@ -384,6 +434,7 @@ async function main(): Promise<void> {
       const response = await fetch(new URL(`/v1/auctions/${auctionIds.missing}`, baseUrl), {
         headers: { "X-User-Id": "forged", "X-User-Role": "seller" },
       });
+
       return parseResponse(response, operationFailureSchema, 401);
     },
     (failure) => failure.error.code,
@@ -400,6 +451,7 @@ async function main(): Promise<void> {
     () => createAuction(auctionIds.live, auctionBody("Production integration auction")),
     (result) => (result.ok ? `sequence ${result.event.sequence}` : result.error.code),
   );
+
   assert.equal(created.ok, true);
 
   await check(
@@ -410,8 +462,10 @@ async function main(): Promise<void> {
         headers: await sellerHeaders(),
         body: JSON.stringify(auctionBody("Production integration auction")),
       });
+
       const result = await parseResponse(response, auctionActionResultSchema, 200);
       assert.equal(result.ok && result.replayed, true);
+
       return result;
     },
     (result) => (result.ok ? `replayed sequence ${result.event.sequence}` : result.error.code),
@@ -442,6 +496,7 @@ async function main(): Promise<void> {
     bidderId: `integration-bidder-${index}`,
     key: `burst-${runId}-${index}`,
   }));
+
   const burst = await check(
     "24-way contending bid burst",
     () =>
@@ -456,6 +511,7 @@ async function main(): Promise<void> {
         results.filter(({ response }) => response.status === 409).length
       } rejected`,
   );
+
   const accepted = burst.filter(({ response }) => response.status === 200);
   assert.equal(accepted.length, 1);
   assert.equal(burst.filter(({ response }) => response.status === 409).length, 23);
@@ -464,6 +520,7 @@ async function main(): Promise<void> {
 
   const bidEvent = realtimeMessageSchema.parse(JSON.parse(await messages.next()));
   assert.equal(bidEvent.type, "auction.event");
+
   if (bidEvent.type === "auction.event") assert.equal(bidEvent.event.type, "bid.accepted");
   checks.push({
     name: "WebSocket bid fanout",
@@ -480,8 +537,10 @@ async function main(): Promise<void> {
         acceptedAttempt.key,
         1_000,
       );
+
       assert.equal(replay.response.status, 200);
       assert.equal(replay.result.ok && replay.result.replayed, true);
+
       return replay.result;
     },
     (result) => (result.ok ? `replayed sequence ${result.event.sequence}` : result.error.code),
@@ -496,9 +555,12 @@ async function main(): Promise<void> {
         acceptedAttempt.key,
         1_100,
       );
+
       assert.equal(reused.response.status, 409);
       assert.equal(reused.result.ok, false);
+
       if (!reused.result.ok) assert.equal(reused.result.error.code, "IDEMPOTENCY_KEY_REUSED");
+
       return reused.result;
     },
     (result) => (result.ok ? "unexpected success" : result.error.code),
@@ -510,7 +572,9 @@ async function main(): Promise<void> {
       const low = await bid(auctionIds.live, "integration-low-bidder", `low-${runId}`, 1_050);
       assert.equal(low.response.status, 409);
       assert.equal(low.result.ok, false);
+
       if (!low.result.ok) assert.equal(low.result.error.code, "BID_TOO_LOW");
+
       return low.result;
     },
     (result) => (result.ok ? "unexpected success" : result.error.code),
@@ -526,8 +590,10 @@ async function main(): Promise<void> {
         `next-${runId}`,
         1_100,
       );
+
       assert.equal(acceptedBid.response.status, 200);
       assert.equal(acceptedBid.result.ok, true);
+
       return acceptedBid.result;
     },
     (result) => `${result.auction.currentPriceCents} cents`,
@@ -544,14 +610,17 @@ async function main(): Promise<void> {
         acceptedAttempt.key,
         1_000,
       );
+
       assert.equal(replay.response.status, 200);
       assert.equal(replay.result.ok, true);
+
       if (replay.result.ok) {
         assert.equal(replay.result.replayed, true);
         assert.equal(replay.result.auction.currentPriceCents, 1_000);
         assert.equal(replay.result.auction.bidCount, 1);
         assert.equal(replay.result.event.sequence, 3);
       }
+
       return replay.result;
     },
     (result) =>
@@ -563,10 +632,12 @@ async function main(): Promise<void> {
     async () => {
       const pong = messages.next();
       socket.send("ping");
+
       return pong;
     },
     (pong) => {
       assert.equal(pong, "pong");
+
       return pong;
     },
   );
@@ -577,14 +648,17 @@ async function main(): Promise<void> {
       const response = await api(
         `/v1/auctions/${auctionIds.live}/history?afterSequence=0&limit=50`,
       );
+
       const result = await parseResponse(response, historyResultSchema, 200);
       assert.equal(result.ok, true);
+
       if (result.ok) {
         assert.deepEqual(
           result.events.map((event) => event.sequence),
           [1, 2, 3, 4],
         );
       }
+
       return result;
     },
     (result) => result.events.map((event) => event.type).join(" → "),
@@ -597,6 +671,7 @@ async function main(): Promise<void> {
         method: "POST",
         headers: await bidderHeaders("wrong-role", `wrong-role-${runId}`),
       });
+
       return parseResponse(response, operationFailureSchema, 403);
     },
     (failure) => failure.error.code,
@@ -610,6 +685,7 @@ async function main(): Promise<void> {
         headers: await sellerHeaders(),
         body: JSON.stringify({ title: "x".repeat(17_000) }),
       });
+
       return parseResponse(response, operationFailureSchema, 413);
     },
     (failure) => failure.error.code,
@@ -624,10 +700,12 @@ async function main(): Promise<void> {
         method: "POST",
         headers: await sellerHeaders(`cancel-${runId}`),
       });
+
       const result = await parseResponse(response, auctionActionResultSchema, 200);
       assert.equal(result.ok && result.auction.state, "CANCELLED");
       const late = await bid(auctionIds.cancelled, "cancel-late", `cancel-late-${runId}`, 1_000);
       assert.equal(late.response.status, 409);
+
       return result;
     },
     (result) => (result.ok ? result.auction.state : result.error.code),
@@ -640,14 +718,17 @@ async function main(): Promise<void> {
   const alarmBid = await bid(auctionIds.alarm, "alarm-winner", `alarm-bid-${runId}`, 1_000);
   assert.equal(alarmBid.response.status, 200);
   assert.equal(alarmBid.result.ok, true);
+
   if (alarmBid.result.ok && beforeEndsAt !== null) {
     assert.equal(alarmBid.result.auction.endsAt, beforeEndsAt + 2_000);
   }
+
   const closed = await check(
     "anti-sniping extension and alarm close",
     () => pollUntilClosed(auctionIds.alarm),
     (result) => `${result.auction.state}, winner ${result.auction.winnerId}`,
   );
+
   assert.equal(closed.ok && closed.auction.winnerId, "alarm-winner");
 
   await check(
@@ -672,6 +753,7 @@ async function main(): Promise<void> {
             : null,
       }))
     : [];
+
   const summary = {
     ok: true as const,
     baseUrl: baseUrl.origin,
@@ -680,11 +762,12 @@ async function main(): Promise<void> {
     checks,
     timeline,
   };
+
   const report = await writeIntegrationReport(summary);
   console.log(JSON.stringify({ ...summary, report }, null, 2));
 }
 
-main().catch((error: unknown) => {
+main().catch((cause: unknown) => {
   activeSocket?.close(1011, "integration failed");
   console.error(
     JSON.stringify(
@@ -694,7 +777,7 @@ main().catch((error: unknown) => {
         runId,
         auctionIds,
         checks,
-        error: error instanceof Error ? error.stack : String(error),
+        error: cause instanceof Error ? cause.stack : String(cause),
       },
       null,
       2,

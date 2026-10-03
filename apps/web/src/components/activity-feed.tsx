@@ -10,7 +10,7 @@ const eventIcon = {
   "auction.closed": Gavel,
 } as const;
 
-function eventCopy(event: AuctionEvent): { title: string; detail: string } {
+function eventCopy(event: AuctionEvent) {
   switch (event.type) {
     case "auction.created":
       return { title: "Lot created", detail: event.payload.title };
@@ -41,6 +41,7 @@ function eventCopy(event: AuctionEvent): { title: string; detail: string } {
 
 export function ActivityFeed({ events }: { events: AuctionEvent[] }) {
   const activity = [...events].reverse();
+
   return (
     <section className="activity-panel" aria-labelledby="activity-title">
       <div className="panel-heading">
@@ -60,6 +61,7 @@ export function ActivityFeed({ events }: { events: AuctionEvent[] }) {
           activity.slice(0, 7).map((event) => {
             const Icon = eventIcon[event.type];
             const copy = eventCopy(event);
+
             return (
               <article className={`activity-row event-${event.type}`} key={event.sequence}>
                 <span className="activity-icon">

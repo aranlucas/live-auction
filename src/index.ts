@@ -25,6 +25,7 @@ import {
 import { buildOpenApiDocument, registerOpenApi } from "./openapi";
 
 export { Auction } from "./auction";
+
 export { AuctionFanout } from "./fanout";
 
 class HttpError extends Error {
@@ -49,12 +50,15 @@ type AppEnvironment = {
 };
 
 const requestIdSchema = z.uuid();
+
 const jsonContentHeadersSchema = z.object({
   "content-type": z.string().regex(/^application\/json(?:\s*;.*)?$/i),
 });
+
 const bidCommandHeadersSchema = commandHeadersSchema.extend({
   "content-type": z.string().regex(/^application\/json(?:\s*;.*)?$/i),
 });
+
 const websocketHeadersSchema = z
   .object({
     upgrade: z.string().trim().toLowerCase().pipe(z.literal("websocket")),
@@ -64,6 +68,7 @@ const websocketHeadersSchema = z
     const protocols = headers["sec-websocket-protocol"]
       .split(",")
       .map((protocol) => protocol.trim());
+
     if (!protocols.includes("auction.v1")) {
       context.addIssue({
         code: "custom",
@@ -71,6 +76,7 @@ const websocketHeadersSchema = z
         message: "must include auction.v1",
       });
     }
+
     if (!protocols.some((protocol) => protocol.startsWith("auth."))) {
       context.addIssue({
         code: "custom",
@@ -145,8 +151,10 @@ const authenticatedActor = createMiddleware<AppEnvironment>(async (context, next
         error.message,
       );
     }
+
     throw error;
   }
+
   await next();
 });
 
@@ -154,6 +162,7 @@ const sellerActor = createMiddleware<AppEnvironment>(async (context, next) => {
   if (context.get("actor").role !== "seller") {
     throw new HttpError(403, "FORBIDDEN", "This operation requires the seller role");
   }
+
   await next();
 });
 
@@ -161,31 +170,39 @@ const bidderActor = createMiddleware<AppEnvironment>(async (context, next) => {
   if (context.get("actor").role !== "bidder") {
     throw new HttpError(403, "FORBIDDEN", "This operation requires the bidder role");
   }
+
   await next();
 });
 
 const auctionRateLimit = createMiddleware<AppEnvironment>(async (context, next) => {
   const actor = context.get("actor");
+
   const limiter =
     context.req.method === "GET" ? context.env.READ_RATE_LIMITER : context.env.COMMAND_RATE_LIMITER;
+
   const { success } = await limiter.limit({
     key: [actor.id, context.req.method, context.req.path].join(":"),
   });
+
   if (!success) {
     throw new HttpError(429, "RATE_LIMITED", "Too many requests; retry after the rate window");
   }
+
   await next();
 });
 
 const auctionScope = createMiddleware<AppEnvironment>(async (context, next) => {
   const scopedAuctionId = context.get("actor").auctionId;
+
   if (scopedAuctionId && scopedAuctionId !== context.req.param("auctionId")) {
     throw new HttpError(403, "AUCTION_SCOPE_MISMATCH", "This token belongs to a different auction");
   }
+
   await next();
 });
 
 const app = new OpenAPIHono<AppEnvironment>({ strict: false });
+
 registerOpenApi(app);
 
 app.use("*", async (context, next) => {
@@ -233,9 +250,13 @@ app.use(
     onError: () => jsonFailure(413, "BODY_TOO_LARGE", "Request body cannot exceed 16384 bytes"),
   }),
 );
+
 app.use("/v1/auctions/*", authenticatedActor);
+
 app.use("/v1/auctions/:auctionId", auctionScope);
+
 app.use("/v1/auctions/:auctionId/*", auctionScope);
+
 app.use("/v1/auctions/*", auctionRateLimit);
 
 app.get("/health", (context) =>
@@ -245,6 +266,7 @@ app.get("/health", (context) =>
     environment: context.env.ENVIRONMENT,
   }),
 );
+
 app.get("/openapi.json", (context) => context.json(buildOpenApiDocument()));
 
 app.post("/v1/demo-session", async (context) => {
@@ -253,9 +275,11 @@ app.post("/v1/demo-session", async (context) => {
   }
 
   const clientAddress = context.req.header("CF-Connecting-IP") ?? "local";
+
   const { success } = await context.env.COMMAND_RATE_LIMITER.limit({
     key: `demo-session:${clientAddress}`,
   });
+
   if (!success) {
     return jsonFailure(429, "RATE_LIMITED", "Too many demo sessions; retry after the rate window");
   }
@@ -266,6 +290,7 @@ app.post("/v1/demo-session", async (context) => {
     if (error instanceof DemoSessionConfigurationError) {
       throw new HttpError(503, "DEMO_CONFIGURATION_ERROR", error.message);
     }
+
     throw error;
   }
 });
@@ -276,23 +301,28 @@ app.post("/v1/demo-session/:auctionId/bidder", auctionParams, async (context) =>
   }
 
   const { auctionId } = context.req.valid("param");
+
   if (!auctionId.startsWith("demo-")) {
     return jsonFailure(404, "DEMO_AUCTION_NOT_FOUND", "Demo auction not found");
   }
 
   const clientAddress = context.req.header("CF-Connecting-IP") ?? "local";
+
   const { success } = await context.env.COMMAND_RATE_LIMITER.limit({
     key: `demo-bidder:${clientAddress}:${auctionId}`,
   });
+
   if (!success) {
     return jsonFailure(429, "RATE_LIMITED", "Too many demo bidders; retry after the rate window");
   }
 
   const auction = await context.env.AUCTIONS.getByName(auctionId).getAuction();
   const expectedSellerId = `demo-seller-${auctionId.slice("demo-".length)}`;
+
   if (!auction.ok || auction.auction.sellerId !== expectedSellerId) {
     return jsonFailure(404, "DEMO_AUCTION_NOT_FOUND", "Demo auction not found");
   }
+
   if (auction.auction.state !== "LIVE") {
     return jsonFailure(409, "DEMO_AUCTION_NOT_LIVE", "This demo auction is not live");
   }
@@ -303,6 +333,7 @@ app.post("/v1/demo-session/:auctionId/bidder", auctionParams, async (context) =>
     if (error instanceof DemoSessionConfigurationError) {
       throw new HttpError(503, "DEMO_CONFIGURATION_ERROR", error.message);
     }
+
     throw error;
   }
 });
@@ -316,11 +347,13 @@ app.put(
   async (context) => {
     const { auctionId } = context.req.valid("param");
     const input = context.req.valid("json");
+
     const result = await context.env.AUCTIONS.getByName(auctionId).createAuction(
       auctionId,
       context.get("actor").id,
       input,
     );
+
     return json(result, result.ok ? (result.replayed ? 200 : 201) : result.error.status);
   },
 );
@@ -328,16 +361,19 @@ app.put(
 app.get("/v1/auctions/:auctionId", auctionParams, async (context) => {
   const { auctionId } = context.req.valid("param");
   const result = await context.env.AUCTIONS.getByName(auctionId).getAuction();
+
   return json(result, result.ok ? 200 : result.error.status);
 });
 
 app.get("/v1/auctions/:auctionId/history", auctionParams, historyQuery, async (context) => {
   const { auctionId } = context.req.valid("param");
   const query = context.req.valid("query");
+
   const result = await context.env.AUCTIONS.getByName(auctionId).getHistory(
     query.afterSequence,
     query.limit,
   );
+
   return json(result, result.ok ? 200 : result.error.status);
 });
 
@@ -349,10 +385,12 @@ app.post(
   async (context) => {
     const { auctionId } = context.req.valid("param");
     const headers = context.req.valid("header");
+
     const result = await context.env.AUCTIONS.getByName(auctionId).startAuction(
       context.get("actor").id,
       headers["idempotency-key"],
     );
+
     return json(result, result.ok ? 200 : result.error.status);
   },
 );
@@ -367,11 +405,13 @@ app.post(
     const { auctionId } = context.req.valid("param");
     const headers = context.req.valid("header");
     const { amountCents } = context.req.valid("json");
+
     const result = await context.env.AUCTIONS.getByName(auctionId).placeBid(
       context.get("actor").id,
       headers["idempotency-key"],
       amountCents,
     );
+
     return json(result, result.ok ? 200 : result.error.status);
   },
 );
@@ -384,10 +424,12 @@ app.post(
   async (context) => {
     const { auctionId } = context.req.valid("param");
     const headers = context.req.valid("header");
+
     const result = await context.env.AUCTIONS.getByName(auctionId).closeAuction(
       context.get("actor").id,
       headers["idempotency-key"],
     );
+
     return json(result, result.ok ? 200 : result.error.status);
   },
 );
@@ -400,10 +442,12 @@ app.post(
   async (context) => {
     const { auctionId } = context.req.valid("param");
     const headers = context.req.valid("header");
+
     const result = await context.env.AUCTIONS.getByName(auctionId).cancelAuction(
       context.get("actor").id,
       headers["idempotency-key"],
     );
+
     return json(result, result.ok ? 200 : result.error.status);
   },
 );
@@ -416,14 +460,17 @@ app.get(
   (context) => {
     const { auctionId } = context.req.valid("param");
     const protocols = websocketProtocols(context.req.raw);
+
     if (!protocols.includes("auction.v1")) {
       throw new HttpError(426, "UPGRADE_REQUIRED", "Use the auction.v1 WebSocket protocol");
     }
+
     const shard = fanoutShard(context.get("actor").id);
     const headers = new Headers(context.req.raw.headers);
     headers.delete("Authorization");
     headers.set("Sec-WebSocket-Protocol", "auction.v1");
     headers.set("X-Auction-Id", auctionId);
+
     return context.env.AUCTION_FANOUT.getByName(`${auctionId}:${shard}`).fetch(
       new Request(context.req.raw, { headers }),
     );
@@ -434,11 +481,14 @@ app.notFound(() => jsonFailure(404, "ROUTE_NOT_FOUND", "Route not found"));
 
 app.onError((error, context) => {
   const requestId = context.get("requestId") || crypto.randomUUID();
+
   if (error instanceof HttpError) {
     return jsonFailure(error.status, error.code, error.message, requestId);
   }
+
   if (error instanceof HTTPException) {
     const isJsonError = error.status === 400 && error.message.toLowerCase().includes("json");
+
     return jsonFailure(
       error.status,
       isJsonError ? "INVALID_JSON" : "HTTP_ERROR",
@@ -468,6 +518,7 @@ app.onError((error, context) => {
             : JSON.stringify(normalized.cause),
     }),
   );
+
   return jsonFailure(500, "INTERNAL_ERROR", "Internal server error", requestId);
 });
 
@@ -482,9 +533,11 @@ function formatValidationError(error: {
     .join("; ");
 }
 
-function json(value: unknown, status = 200, requestId?: string): Response {
+function json<T>(value: T, status = 200, requestId?: string): Response {
   const headers = new Headers({ "Cache-Control": "no-store" });
+
   if (requestId) headers.set("X-Request-Id", requestId);
+
   return Response.json(value, { status, headers });
 }
 
@@ -493,15 +546,18 @@ function jsonFailure(status: number, code: string, message: string, requestId?: 
     ok: false,
     error: { status, code, message },
   });
+
   return json(body, status, requestId);
 }
 
 function fanoutShard(actorId: string): number {
   let hash = 2_166_136_261;
+
   for (const character of actorId) {
     hash ^= character.codePointAt(0) ?? 0;
     hash = Math.imul(hash, 16_777_619);
   }
+
   return (hash >>> 0) % 4;
 }
 

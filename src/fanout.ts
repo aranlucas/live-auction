@@ -8,6 +8,7 @@ import {
 } from "./model";
 
 const MAX_CONNECTIONS_PER_SHARD = 2_000;
+
 const RETAINED_EVENTS = 500;
 
 const attachmentSchema = z.strictObject({
@@ -48,10 +49,14 @@ export class AuctionFanout extends DurableObject<Env> {
     );
 
     const payload = JSON.stringify(message);
+
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = attachmentSchema.safeParse(socket.deserializeAttachment());
+
       if (!attachment.success || !attachment.data.ready) continue;
+
       if (message.event.sequence <= attachment.data.cursor) continue;
+
       try {
         socket.send(payload);
         socket.serializeAttachment({
@@ -68,6 +73,7 @@ export class AuctionFanout extends DurableObject<Env> {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("Expected a WebSocket upgrade", { status: 426 });
     }
+
     if (this.ctx.getWebSockets().length >= MAX_CONNECTIONS_PER_SHARD) {
       return Response.json(
         {
@@ -83,9 +89,11 @@ export class AuctionFanout extends DurableObject<Env> {
     }
 
     const auctionId = auctionIdSchema.parse(request.headers.get("X-Auction-Id"));
+
     const { afterSequence } = realtimeQuerySchema.parse(
       Object.fromEntries(new URL(request.url).searchParams),
     );
+
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
@@ -94,17 +102,21 @@ export class AuctionFanout extends DurableObject<Env> {
 
     const bootstrap =
       await this.env.AUCTIONS.getByName(auctionId).getRealtimeBootstrap(afterSequence);
+
     if (!bootstrap.ok) {
       server.close(1008, bootstrap.error.code);
+
       return Response.json(bootstrap, { status: bootstrap.error.status });
     }
 
     server.send(JSON.stringify(bootstrap.message));
     let cursor = bootstrap.message.cursor;
+
     for (const message of this.readMessagesAfter(cursor)) {
       server.send(JSON.stringify(message));
       cursor = message.event.sequence;
     }
+
     server.serializeAttachment({ ready: true, cursor });
 
     return new Response(null, {
@@ -115,7 +127,7 @@ export class AuctionFanout extends DurableObject<Env> {
   }
 
   webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
-    if (typeof message === "string" && message === "ping") socket.send("pong");
+    if (message === "ping") socket.send("pong");
   }
 
   webSocketClose(socket: WebSocket, code: number, reason: string): void {
@@ -135,6 +147,7 @@ export class AuctionFanout extends DurableObject<Env> {
       .toArray()
       .map((row) => {
         const stored = storedMessageRowSchema.parse(row);
+
         return realtimeEventMessageSchema.parse(JSON.parse(stored.message_json));
       });
   }

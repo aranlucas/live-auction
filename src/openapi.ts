@@ -193,6 +193,7 @@ export function registerOpenApi<Environment extends HonoEnvironment>(
 export function buildOpenApiDocument() {
   const registry = new OpenAPIHono();
   registerOpenApi(registry);
+
   return registry.getOpenAPI31Document({
     openapi: "3.1.0",
     info: {

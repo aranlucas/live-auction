@@ -62,6 +62,7 @@ export default defineConfig((ctx) => {
         },
       };
     }
+
     default: {
       return {
         worker: {

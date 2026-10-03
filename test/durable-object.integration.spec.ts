@@ -26,6 +26,7 @@ const commandHeaders = async (
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers);
+
   if (
     path.startsWith("/v1/auctions/") &&
     !headers.has("Authorization") &&
@@ -34,6 +35,7 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
     const viewer = await actorHeaders("integration-viewer", "viewer");
     headers.set("Authorization", viewer.Authorization);
   }
+
   return exports.default.fetch(new Request(`https://auction.test${path}`, { ...init, headers }));
 }
 
@@ -55,10 +57,12 @@ async function createDraft(id: string, title = "Integration camera"): Promise<Re
 
 async function createAndStart(id: string): Promise<void> {
   expect((await createDraft(id)).status).toBe(201);
+
   const started = await request(`/v1/auctions/${id}/start`, {
     method: "POST",
     headers: await commandHeaders("seller-integration", "seller", `start-${id}`),
   });
+
   expect(started.status).toBe(200);
 }
 
@@ -81,6 +85,7 @@ function nextSocketMessage(socket: WebSocket): Promise<string> {
       () => reject(new Error("Timed out waiting for WebSocket message")),
       2_000,
     );
+
     socket.addEventListener(
       "message",
       (event) => {
@@ -103,13 +108,17 @@ describe("Durable Object integration behavior", () => {
     const conflict = auctionActionResultSchema.parse(
       await (await createDraft(id, "Different camera")).json(),
     );
+
     expect(conflict.ok).toBe(false);
+
     if (!conflict.ok) expect(conflict.error.code).toBe("AUCTION_ALREADY_EXISTS");
 
     const other = readResultSchema.parse(
       await (await request("/v1/auctions/create-replay-integration-other")).json(),
     );
+
     expect(other.ok).toBe(false);
+
     if (!other.ok) expect(other.error.code).toBe("AUCTION_NOT_FOUND");
   });
 
@@ -123,6 +132,7 @@ describe("Durable Object integration behavior", () => {
 
     const state = readResultSchema.parse(await (await request(`/v1/auctions/${id}`)).json());
     expect(state.ok).toBe(true);
+
     if (state.ok) {
       expect(state.auction.currentPriceCents).toBe(1_100);
       expect(state.auction.leaderId).toBe("bidder-b");
@@ -132,7 +142,9 @@ describe("Durable Object integration behavior", () => {
     const history = historyResultSchema.parse(
       await (await request(`/v1/auctions/${id}/history`)).json(),
     );
+
     expect(history.ok).toBe(true);
+
     if (history.ok) expect(history.events.map((event) => event.sequence)).toEqual([1, 2, 3, 4]);
   });
 
@@ -146,9 +158,11 @@ describe("Durable Object integration behavior", () => {
         "Sec-WebSocket-Protocol": await websocketProtocols("socket-viewer", "viewer"),
       },
     });
+
     expect(response.status).toBe(101);
     const socket = response.webSocket;
     expect(socket).not.toBeNull();
+
     if (!socket) return;
 
     const snapshotMessage = nextSocketMessage(socket);
@@ -158,6 +172,7 @@ describe("Durable Object integration behavior", () => {
     expect(snapshot.auction.state).toBe("LIVE");
 
     await evictDurableObject(env.AUCTIONS.getByName(id));
+
     for (let shard = 0; shard < 4; shard += 1) {
       await evictDurableObject(env.AUCTION_FANOUT.getByName(`${id}:${shard}`));
     }
@@ -170,10 +185,12 @@ describe("Durable Object integration behavior", () => {
     expect((await placeBid(id, "socket-bidder", 1_000, "socket-bid")).status).toBe(200);
     const event = realtimeMessageSchema.parse(JSON.parse(await eventMessage));
     expect(event.type).toBe("auction.event");
+
     if (event.type === "auction.event") {
       expect(event.event.type).toBe("bid.accepted");
       expect(event.auction.leaderId).toBe("socket-bidder");
     }
+
     socket.close(1000, "test complete");
   });
 
@@ -188,15 +205,18 @@ describe("Durable Object integration behavior", () => {
         "Sec-WebSocket-Protocol": await websocketProtocols("resume-viewer", "viewer"),
       },
     });
+
     expect(response.status).toBe(101);
     const socket = response.webSocket;
     expect(socket).not.toBeNull();
+
     if (!socket) return;
 
     const initial = nextSocketMessage(socket);
     socket.accept();
     const snapshot = realtimeMessageSchema.parse(JSON.parse(await initial));
     expect(snapshot.type).toBe("auction.snapshot");
+
     if (snapshot.type === "auction.snapshot") {
       expect(snapshot.resyncRequired).toBe(false);
       expect(snapshot.events.map((event) => event.sequence)).toEqual([2, 3]);
@@ -208,6 +228,7 @@ describe("Durable Object integration behavior", () => {
     expect((await placeBid(id, "resume-bidder-2", 1_100, "resume-bid-2")).status).toBe(200);
     const event = realtimeMessageSchema.parse(JSON.parse(await next));
     expect(event.type).toBe("auction.event");
+
     if (event.type === "auction.event") expect(event.cursor).toBe(4);
     socket.close(1000, "resume complete");
   });
@@ -215,6 +236,7 @@ describe("Durable Object integration behavior", () => {
   it("paginates a strictly ordered event log", async () => {
     const id = "history-pagination-integration";
     await createAndStart(id);
+
     for (let index = 0; index < 5; index += 1) {
       expect(
         (await placeBid(id, `bidder-${index}`, 1_000 + index * 100, `page-bid-${index}`)).status,
@@ -224,9 +246,11 @@ describe("Durable Object integration behavior", () => {
     const firstPage = historyResultSchema.parse(
       await (await request(`/v1/auctions/${id}/history?afterSequence=2&limit=2`)).json(),
     );
+
     const secondPage = historyResultSchema.parse(
       await (await request(`/v1/auctions/${id}/history?afterSequence=4&limit=10`)).json(),
     );
+
     expect(firstPage.ok && firstPage.events.map((event) => event.sequence)).toEqual([3, 4]);
     expect(secondPage.ok && secondPage.events.map((event) => event.sequence)).toEqual([5, 6, 7]);
   });
@@ -234,6 +258,7 @@ describe("Durable Object integration behavior", () => {
   it("cancels a live auction, removes its alarm, and rejects later bids", async () => {
     const id = "cancel-alarm-integration";
     await createAndStart(id);
+
     const cancelled = auctionActionResultSchema.parse(
       await (
         await request(`/v1/auctions/${id}/cancel`, {
@@ -242,13 +267,16 @@ describe("Durable Object integration behavior", () => {
         })
       ).json(),
     );
+
     expect(cancelled.ok && cancelled.auction.state).toBe("CANCELLED");
     expect(await runDurableObjectAlarm(env.AUCTIONS.getByName(id))).toBe(false);
 
     const late = auctionActionResultSchema.parse(
       await (await placeBid(id, "late-bidder", 1_000, "cancelled-late-bid")).json(),
     );
+
     expect(late.ok).toBe(false);
+
     if (!late.ok) expect(late.error.code).toBe("AUCTION_NOT_LIVE");
   });
 
@@ -267,11 +295,13 @@ describe("Durable Object integration behavior", () => {
   it("serializes a burst of equal bids to one winner", async () => {
     const id = "burst-contention-integration";
     await createAndStart(id);
+
     const responses = await Promise.all(
       Array.from({ length: 32 }, (_, index) =>
         placeBid(id, `burst-bidder-${index}`, 1_000, `burst-key-${index}`),
       ),
     );
+
     expect(responses.filter((response) => response.status === 200)).toHaveLength(1);
     expect(responses.filter((response) => response.status === 409)).toHaveLength(31);
 

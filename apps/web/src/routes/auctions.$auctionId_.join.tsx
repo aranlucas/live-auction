@@ -13,6 +13,7 @@ export const Route = createFileRoute("/auctions/$auctionId_/join")({
 function JoinAuctionRoute() {
   const { auctionId } = Route.useParams();
   const search = Route.useSearch();
+
   return (
     <AuctionRoomPage
       autoJoin
