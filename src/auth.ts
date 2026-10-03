@@ -27,6 +27,7 @@ export class AuthenticationError extends Error {
 
 export async function authenticate(request: Request, env: Env): Promise<Actor> {
   const token = extractBearerToken(request);
+
   if (!token) {
     throw new AuthenticationError(
       "UNAUTHENTICATED",
@@ -35,13 +36,16 @@ export async function authenticate(request: Request, env: Env): Promise<Actor> {
   }
 
   const verifier = createVerifier(env);
+
   try {
     const { payload } = await jwtVerify(token, verifier, {
       issuer: env.AUTH_ISSUER,
       audience: env.AUTH_AUDIENCE,
       algorithms: ["ES256", "RS256"],
     });
+
     const claims = jwtClaimsSchema.parse(payload);
+
     return actorSchema.parse({
       id: claims.sub,
       role: claims.role,
@@ -62,21 +66,26 @@ export function websocketProtocols(request: Request): string[] {
 
 function extractBearerToken(request: Request): string | null {
   const authorization = request.headers.get("Authorization");
+
   if (authorization?.startsWith("Bearer ")) return authorization.slice("Bearer ".length);
 
   const authProtocol = websocketProtocols(request).find((protocol) => protocol.startsWith("auth."));
+
   return authProtocol ? authProtocol.slice("auth.".length) : null;
 }
 
 function createVerifier(env: Env) {
   const jwksUrl = String(env.AUTH_JWKS_URL);
+
   if (jwksUrl) {
     try {
       const cacheKey = `remote:${jwksUrl}`;
       const cached = verifierCache.get(cacheKey);
+
       if (cached) return cached;
       const verifier = createRemoteJWKSet(new URL(jwksUrl));
       verifierCache.set(cacheKey, verifier);
+
       return verifier;
     } catch {
       throw new AuthenticationError("AUTH_CONFIGURATION_ERROR", "AUTH_JWKS_URL is invalid");
@@ -93,9 +102,11 @@ function createVerifier(env: Env) {
   try {
     const cacheKey = `local:${env.AUTH_JWKS_JSON}`;
     const cached = verifierCache.get(cacheKey);
+
     if (cached) return cached;
     const verifier = createLocalJWKSet(jwksSchema.parse(JSON.parse(env.AUTH_JWKS_JSON)));
     verifierCache.set(cacheKey, verifier);
+
     return verifier;
   } catch {
     throw new AuthenticationError("AUTH_CONFIGURATION_ERROR", "AUTH_JWKS_JSON is invalid");

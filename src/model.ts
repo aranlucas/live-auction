@@ -1,9 +1,11 @@
 import { z } from "@hono/zod-openapi";
 
 export const AUCTION_STATES = ["DRAFT", "LIVE", "CLOSED", "CANCELLED"] as const;
+
 export const ACTOR_ROLES = ["seller", "bidder", "viewer"] as const;
 
 export const auctionStateSchema = z.enum(AUCTION_STATES).openapi("AuctionState");
+
 export const actorRoleSchema = z.enum(ACTOR_ROLES).openapi("ActorRole");
 
 export const auctionIdSchema = z
@@ -114,7 +116,7 @@ export const eventPayloadSchemas = {
   }),
 } as const;
 
-const eventBaseShape = {
+const eventBaseFields = {
   sequence: z.int().positive(),
   actorId: z.string(),
   occurredAt: z.int().nonnegative(),
@@ -123,27 +125,27 @@ const eventBaseShape = {
 export const auctionEventSchema = z
   .discriminatedUnion("type", [
     z.strictObject({
-      ...eventBaseShape,
+      ...eventBaseFields,
       type: z.literal("auction.created"),
       payload: eventPayloadSchemas["auction.created"],
     }),
     z.strictObject({
-      ...eventBaseShape,
+      ...eventBaseFields,
       type: z.literal("auction.started"),
       payload: eventPayloadSchemas["auction.started"],
     }),
     z.strictObject({
-      ...eventBaseShape,
+      ...eventBaseFields,
       type: z.literal("bid.accepted"),
       payload: eventPayloadSchemas["bid.accepted"],
     }),
     z.strictObject({
-      ...eventBaseShape,
+      ...eventBaseFields,
       type: z.literal("auction.cancelled"),
       payload: eventPayloadSchemas["auction.cancelled"],
     }),
     z.strictObject({
-      ...eventBaseShape,
+      ...eventBaseFields,
       type: z.literal("auction.closed"),
       payload: eventPayloadSchemas["auction.closed"],
     }),
@@ -280,26 +282,47 @@ export const healthSchema = z
   .openapi("Health");
 
 export type AuctionState = z.infer<typeof auctionStateSchema>;
+
 export type ActorRole = z.infer<typeof actorRoleSchema>;
+
 export type Actor = z.infer<typeof actorSchema>;
+
 export type CreateAuctionInput = z.infer<typeof createAuctionInputSchema>;
+
 export type AuctionView = z.infer<typeof auctionViewSchema>;
+
 export type AuctionEvent = z.infer<typeof auctionEventSchema>;
+
 export type AuctionEventType = AuctionEvent["type"];
+
 export type EventPayloadByType = {
   [Type in AuctionEventType]: z.infer<(typeof eventPayloadSchemas)[Type]>;
 };
+
 export type AuctionActionSuccess = z.infer<typeof auctionActionSuccessSchema>;
+
 export type ReadSuccess = z.infer<typeof readSuccessSchema>;
+
 export type HistorySuccess = z.infer<typeof historySuccessSchema>;
+
 export type OperationFailure = z.infer<typeof operationFailureSchema>;
+
 export type AuctionActionResult = z.infer<typeof auctionActionResultSchema>;
+
 export type ReadResult = z.infer<typeof readResultSchema>;
+
 export type HistoryResult = z.infer<typeof historyResultSchema>;
+
 export type RealtimeMessage = z.infer<typeof realtimeMessageSchema>;
+
 export type RealtimeEventMessage = z.infer<typeof realtimeEventMessageSchema>;
+
 export type RealtimeBootstrapResult = z.infer<typeof realtimeBootstrapResultSchema>;
+
 export type DemoSessionSuccess = z.infer<typeof demoSessionSuccessSchema>;
+
 export type DemoSessionResult = z.infer<typeof demoSessionResultSchema>;
+
 export type DemoBidderSessionSuccess = z.infer<typeof demoBidderSessionSuccessSchema>;
+
 export type DemoBidderSessionResult = z.infer<typeof demoBidderSessionResultSchema>;

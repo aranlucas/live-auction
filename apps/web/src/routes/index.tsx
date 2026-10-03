@@ -11,5 +11,6 @@ export const Route = createFileRoute("/")({
 
 function HomeRoute() {
   const search = Route.useSearch();
+
   return <AuctionRoomPage routeApiBaseUrl={search.api} />;
 }

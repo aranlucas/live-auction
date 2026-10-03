@@ -1,3 +1,5 @@
+type AuthHeaders = { Authorization: string; "Idempotency-Key"?: string };
+
 import { importJWK, SignJWT } from "jose";
 
 const privateJwk = {
@@ -16,14 +18,17 @@ export async function tokenFor(
   overrides?: { issuer?: string; expiresAt?: number; auctionId?: string },
 ): Promise<string> {
   const key = await importJWK(privateJwk, "ES256");
+
   const token = new SignJWT({ role, auctionId: overrides?.auctionId })
     .setProtectedHeader({ alg: "ES256", kid: privateJwk.kid })
     .setSubject(subject)
     .setIssuer(overrides?.issuer ?? "https://auction.test")
     .setAudience("live-auction-test")
     .setIssuedAt();
+
   if (overrides?.expiresAt !== undefined) token.setExpirationTime(overrides.expiresAt);
   else token.setExpirationTime("15m");
+
   return token.sign(key);
 }
 
@@ -32,10 +37,13 @@ export async function actorHeaders(
   role: "seller" | "bidder" | "viewer",
   idempotencyKey?: string,
 ): Promise<Record<string, string>> {
-  return {
+  const headers: AuthHeaders = {
     Authorization: `Bearer ${await tokenFor(subject, role)}`,
-    ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
   };
+
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+
+  return headers;
 }
 
 export async function websocketProtocols(

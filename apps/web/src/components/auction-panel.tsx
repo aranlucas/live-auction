@@ -41,10 +41,13 @@ function useRemainingSeconds(endsAt: number | null | undefined): number {
   useEffect(() => {
     const update = () =>
       setRemaining(endsAt ? Math.max(0, differenceInSeconds(endsAt, Date.now())) : 0);
+
     update();
     const interval = window.setInterval(update, 250);
+
     return () => window.clearInterval(interval);
   }, [endsAt]);
+
   return remaining;
 }
 
@@ -53,6 +56,7 @@ function CountdownRing({ seconds, total }: { seconds: number; total: number }) {
   const circumference = 2 * Math.PI * 48;
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
+
   return (
     <div className={`countdown-ring ${seconds <= 10 ? "is-urgent" : ""}`}>
       <svg viewBox="0 0 112 112" aria-hidden="true">
@@ -93,10 +97,12 @@ export function AuctionPanel({
   const remainingSeconds = useRemainingSeconds(auction?.endsAt);
   const nextMinimum = auction?.nextMinimumBidCents ?? 10_000;
   const isLive = auction?.state === "LIVE";
+
   const form = useForm({
     defaultValues: { amount: (nextMinimum / 100).toFixed(0) },
     onSubmit: async ({ value }) => {
       const cents = Math.round(Number(value.amount) * 100);
+
       if (Number.isFinite(cents) && cents >= nextMinimum) await onBid(cents);
     },
   });
@@ -107,6 +113,7 @@ export function AuctionPanel({
 
   if (!auction) {
     const hasRoomRoute = Boolean(roomAuctionId);
+
     return (
       <aside className="auction-panel empty-auction" aria-label="Auction controls">
         <div className="empty-auction-mark">

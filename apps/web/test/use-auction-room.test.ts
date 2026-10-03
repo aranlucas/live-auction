@@ -2,7 +2,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type AuctionView } from "cloudflare-live-auction/model";
+import { auctionViewSchema, type AuctionView } from "cloudflare-live-auction/model";
 import { useAuctionRoom } from "../src/hooks/use-auction-room";
 import { type TestRoomConfig } from "../src/lib/auction-api";
 
@@ -66,7 +66,7 @@ class ScriptedSocket extends EventTarget {
     this.readyState = ScriptedSocket.CLOSED;
   }
 
-  receive(value: unknown) {
+  receive<T>(value: T) {
     const event = new MessageEvent("message", { data: JSON.stringify(value) });
     Object.defineProperty(event, "target", { value: this });
     this.onmessage?.(event);
@@ -90,13 +90,18 @@ interface PendingRead {
 }
 
 let pending: PendingRead[];
+
 let client: QueryClient;
+
 let root: Root;
+
 let container: HTMLDivElement;
+
 let room: ReturnType<typeof useAuctionRoom>;
 
 function Probe({ config }: { config: TestRoomConfig }) {
   room = useAuctionRoom(config);
+
   return createElement(
     "output",
     { "data-fetching": room.auctionQuery.isFetching, "data-error": room.auctionQuery.isError },
@@ -130,6 +135,7 @@ async function connect(version = 7) {
   await act(async () => {
     ScriptedSocket.instances.at(-1)!.open();
   });
+
   return ScriptedSocket.instances.at(-1)!;
 }
 
@@ -139,7 +145,7 @@ async function snapshot(socket: ScriptedSocket, value: AuctionView) {
 }
 
 function visibleAuction(): AuctionView | null {
-  return JSON.parse(container.textContent || "null") as AuctionView | null;
+  return auctionViewSchema.nullable().parse(JSON.parse(container.textContent || "null"));
 }
 
 beforeEach(() => {
@@ -151,9 +157,11 @@ beforeEach(() => {
     "fetch",
     vi.fn((input: URL, init?: RequestInit) => {
       const url = new URL(input);
+
       if (url.pathname.endsWith("/history")) {
         return Promise.resolve(Response.json({ ok: true, auction: auction(7), events: [] }));
       }
+
       // Intentionally allow replies after abort, to prove cancelled work cannot commit.
       return new Promise<Response>((resolve) => {
         pending.push({ url, signal: init?.signal, resolve });

@@ -5,6 +5,7 @@ const identitySchema = z.object({ sub: z.string().optional() });
 
 export function currency(cents: number | null, code = "USD"): string {
   if (cents === null) return "—";
+
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: code,
@@ -14,6 +15,7 @@ export function currency(cents: number | null, code = "USD"): string {
 
 export function tokenSubject(token: string): string {
   if (!token) return "Token needed";
+
   try {
     return identitySchema.parse(decodeJwt(token)).sub ?? "Authenticated";
   } catch {

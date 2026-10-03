@@ -1,6 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { listDurableObjectIds, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { Auction } from "../src/auction";
 import {
   auctionActionResultSchema,
@@ -26,6 +27,7 @@ const bidderHeaders = async (bidderId: string, key: string): Promise<Record<stri
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers);
+
   if (
     path.startsWith("/v1/auctions/") &&
     !headers.has("Authorization") &&
@@ -34,6 +36,7 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
     const viewer = await actorHeaders("test-viewer", "viewer");
     headers.set("Authorization", viewer.Authorization);
   }
+
   return exports.default.fetch(new Request(`https://auction.test${path}`, { ...init, headers }));
 }
 
@@ -52,12 +55,14 @@ async function createAndStart(id: string, overrides: Record<string, number> = {}
       ...overrides,
     }),
   });
+
   expect(create.status).toBe(201);
 
   const start = await request(`/v1/auctions/${id}/start`, {
     method: "POST",
     headers: await sellerHeaders(`start-${id}`),
   });
+
   expect(start.status).toBe(200);
 }
 
@@ -81,6 +86,7 @@ describe("live auction API", () => {
         },
       }),
     );
+
     expect(response.status).toBe(204);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:3000");
     expect(response.headers.get("Access-Control-Allow-Methods")).toContain("PUT");
@@ -96,6 +102,7 @@ describe("live auction API", () => {
         },
       }),
     );
+
     expect(disallowed.headers.get("Access-Control-Allow-Origin")).toBeNull();
 
     const demoPreflight = await exports.default.fetch(
@@ -107,6 +114,7 @@ describe("live auction API", () => {
         },
       }),
     );
+
     expect(demoPreflight.status).toBe(204);
     expect(demoPreflight.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:3000");
   });
@@ -115,13 +123,16 @@ describe("live auction API", () => {
     const sessionResponse = await request("/v1/demo-session", {
       method: "POST",
     });
+
     expect(sessionResponse.status).toBe(201);
     expect(sessionResponse.headers.get("Cache-Control")).toBe("no-store");
     const session = demoSessionResultSchema.parse(await sessionResponse.json());
     expect(session.ok).toBe(true);
+
     if (!session.ok) return;
 
     expect(session.expiresAt).toBeGreaterThan(Math.floor(Date.now() / 1_000) + 14 * 60);
+
     const create = await request(`/v1/auctions/${session.auctionId}`, {
       method: "PUT",
       headers: {
@@ -138,14 +149,17 @@ describe("live auction API", () => {
         extensionSeconds: 10,
       }),
     });
+
     expect(create.status).toBe(201);
 
     const draftJoinResponse = await request(`/v1/demo-session/${session.auctionId}/bidder`, {
       method: "POST",
     });
+
     expect(draftJoinResponse.status).toBe(409);
     const draftJoin = demoBidderSessionResultSchema.parse(await draftJoinResponse.json());
     expect(draftJoin.ok).toBe(false);
+
     if (!draftJoin.ok) expect(draftJoin.error.code).toBe("DEMO_AUCTION_NOT_LIVE");
 
     const start = await request(`/v1/auctions/${session.auctionId}/start`, {
@@ -155,19 +169,23 @@ describe("live auction API", () => {
         "Idempotency-Key": "start-scoped-demo",
       },
     });
+
     expect(start.status).toBe(200);
 
     const firstBidderResponse = await request(`/v1/demo-session/${session.auctionId}/bidder`, {
       method: "POST",
     });
+
     const secondBidderResponse = await request(`/v1/demo-session/${session.auctionId}/bidder`, {
       method: "POST",
     });
+
     expect(firstBidderResponse.status).toBe(201);
     expect(secondBidderResponse.status).toBe(201);
     const firstBidder = demoBidderSessionResultSchema.parse(await firstBidderResponse.json());
     const secondBidder = demoBidderSessionResultSchema.parse(await secondBidderResponse.json());
     expect(firstBidder.ok && secondBidder.ok).toBe(true);
+
     if (!firstBidder.ok || !secondBidder.ok) return;
     expect(firstBidder.bidderId).not.toBe(secondBidder.bidderId);
 
@@ -180,6 +198,7 @@ describe("live auction API", () => {
       },
       body: JSON.stringify({ amountCents: 1_000 }),
     });
+
     const secondBid = await request(`/v1/auctions/${session.auctionId}/bids`, {
       method: "POST",
       headers: {
@@ -189,13 +208,16 @@ describe("live auction API", () => {
       },
       body: JSON.stringify({ amountCents: 1_100 }),
     });
+
     expect(firstBid.status).toBe(200);
     expect(secondBid.status).toBe(200);
 
     const objectsBeforeMismatch = await listDurableObjectIds(env.AUCTIONS);
+
     const mismatch = await request("/v1/auctions/a-different-demo-room", {
       headers: { Authorization: `Bearer ${session.viewerToken}` },
     });
+
     expect(mismatch.status).toBe(403);
     const failure = operationFailureSchema.parse(await mismatch.json());
     expect(failure.error.code).toBe("AUCTION_SCOPE_MISMATCH");
@@ -209,9 +231,11 @@ describe("live auction API", () => {
     const response = await request(`/v1/demo-session/${auctionId}/bidder`, {
       method: "POST",
     });
+
     expect(response.status).toBe(404);
     const result = demoBidderSessionResultSchema.parse(await response.json());
     expect(result.ok).toBe(false);
+
     if (!result.ok) expect(result.error.code).toBe("DEMO_AUCTION_NOT_FOUND");
   });
 
@@ -233,6 +257,7 @@ describe("live auction API", () => {
         unexpected: true,
       }),
     });
+
     expect(badBody.status).toBe(400);
 
     const malformedJson = await request("/v1/auctions/malformed-json", {
@@ -240,6 +265,7 @@ describe("live auction API", () => {
       headers: await sellerHeaders(),
       body: "{",
     });
+
     expect(malformedJson.status).toBe(400);
 
     const oversizedBody = await request("/v1/auctions/oversized-body", {
@@ -247,6 +273,7 @@ describe("live auction API", () => {
       headers: await sellerHeaders(),
       body: JSON.stringify({ title: "x".repeat(17_000) }),
     });
+
     expect(oversizedBody.status).toBe(413);
 
     await createAndStart("invalid-query");
@@ -263,9 +290,11 @@ describe("live auction API", () => {
       headers: await bidderHeaders("bidder-1", "bid-1"),
       body: JSON.stringify({ amountCents: 1_000 }),
     });
+
     expect(bidResponse.status).toBe(200);
     const bid = await readActionResult(bidResponse);
     expect(bid.ok).toBe(true);
+
     if (!bid.ok) return;
     expect(bid.auction.currentPriceCents).toBe(1_000);
     expect(bid.auction.nextMinimumBidCents).toBe(1_100);
@@ -279,6 +308,7 @@ describe("live auction API", () => {
         body: JSON.stringify({ amountCents: 1_100 }),
       }),
     );
+
     expect(newerBid.ok && newerBid.auction.currentPriceCents).toBe(1_100);
 
     const replay = await readActionResult(
@@ -288,7 +318,9 @@ describe("live auction API", () => {
         body: JSON.stringify({ amountCents: 1_000 }),
       }),
     );
+
     expect(replay.ok).toBe(true);
+
     if (replay.ok) {
       expect(replay.replayed).toBe(true);
       expect(replay.event.sequence).toBe(bid.event.sequence);
@@ -316,7 +348,9 @@ describe("live auction API", () => {
         body: JSON.stringify({ amountCents: 999 }),
       }),
     );
+
     expect(low.ok).toBe(false);
+
     if (!low.ok) expect(low.error.code).toBe("BID_TOO_LOW");
 
     await request(`/v1/auctions/${id}/bids`, {
@@ -324,6 +358,7 @@ describe("live auction API", () => {
       headers: await bidderHeaders("bidder-1", "stable-key"),
       body: JSON.stringify({ amountCents: 1_000 }),
     });
+
     const reused = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
         method: "POST",
@@ -331,7 +366,9 @@ describe("live auction API", () => {
         body: JSON.stringify({ amountCents: 1_500 }),
       }),
     );
+
     expect(reused.ok).toBe(false);
+
     if (!reused.ok) expect(reused.error.code).toBe("IDEMPOTENCY_KEY_REUSED");
   });
 
@@ -355,6 +392,7 @@ describe("live auction API", () => {
     expect([first.status, second.status].sort((left, right) => left - right)).toEqual([200, 409]);
     const state = await readAuction(await request(`/v1/auctions/${id}`));
     expect(state.ok).toBe(true);
+
     if (state.ok) {
       expect(state.auction.bidCount).toBe(1);
       expect(["bidder-a", "bidder-b"]).toContain(state.auction.leaderId);
@@ -370,6 +408,7 @@ describe("live auction API", () => {
     });
     const before = await readAuction(await request(`/v1/auctions/${id}`));
     expect(before.ok).toBe(true);
+
     if (!before.ok || before.auction.endsAt === null) return;
 
     const accepted = await readActionResult(
@@ -379,7 +418,9 @@ describe("live auction API", () => {
         body: JSON.stringify({ amountCents: 1_000 }),
       }),
     );
+
     expect(accepted.ok).toBe(true);
+
     if (accepted.ok) {
       expect(accepted.auction.endsAt).toBe(before.auction.endsAt + 15_000);
       await runInDurableObject(env.AUCTIONS.getByName(id), async (_instance, state) => {
@@ -391,6 +432,7 @@ describe("live auction API", () => {
   it("replays an accepted bid before lazily closing an overdue auction", async () => {
     const id = "late-idempotent-retry";
     await createAndStart(id);
+
     const original = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
         method: "POST",
@@ -398,6 +440,7 @@ describe("live auction API", () => {
         body: JSON.stringify({ amountCents: 1_000 }),
       }),
     );
+
     expect(original.ok).toBe(true);
 
     const stub = env.AUCTIONS.getByName(id);
@@ -411,9 +454,11 @@ describe("live auction API", () => {
       headers: await bidderHeaders("retry-bidder", "stable-retry"),
       body: JSON.stringify({ amountCents: 1_000 }),
     });
+
     expect(replayResponse.status).toBe(200);
     const replay = await readActionResult(replayResponse);
     expect(replay.ok && replay.replayed).toBe(true);
+
     if (replay.ok && original.ok) expect(replay.auction).toEqual(original.auction);
 
     const newLateBid = await readActionResult(
@@ -423,7 +468,9 @@ describe("live auction API", () => {
         body: JSON.stringify({ amountCents: 2_000 }),
       }),
     );
+
     expect(newLateBid.ok).toBe(false);
+
     if (!newLateBid.ok)
       expect(["AUCTION_ENDED", "AUCTION_NOT_LIVE"]).toContain(newLateBid.error.code);
   });
@@ -447,6 +494,7 @@ describe("live auction API", () => {
 
     const state = await readAuction(await request(`/v1/auctions/${id}`));
     expect(state.ok).toBe(true);
+
     if (!state.ok) return;
     expect(state.auction.state).toBe("CLOSED");
     expect(state.auction.winnerId).toBe("winner");
@@ -454,6 +502,7 @@ describe("live auction API", () => {
 
     expect(await runDurableObjectAlarm(stub)).toBe(false);
     const after = await readAuction(await request(`/v1/auctions/${id}`));
+
     if (after.ok) expect(after.auction.version).toBe(closedVersion);
 
     const late = await readActionResult(
@@ -463,7 +512,9 @@ describe("live auction API", () => {
         body: JSON.stringify({ amountCents: 2_000 }),
       }),
     );
+
     expect(late.ok).toBe(false);
+
     if (!late.ok) expect(late.error.code).toBe("AUCTION_NOT_LIVE");
   });
 
@@ -481,18 +532,21 @@ describe("live auction API", () => {
         body: JSON.stringify({ amountCents: 1_000 }),
       }),
     );
+
     expect(unauthenticated.status).toBe(401);
 
     const wrongRole = await request(`/v1/auctions/${id}/close`, {
       method: "POST",
       headers: await bidderHeaders("bidder-1", "wrong-role"),
     });
+
     expect(wrongRole.status).toBe(403);
 
     const missingIdempotencyKey = await request(`/v1/auctions/${id}/close`, {
       method: "POST",
       headers: await sellerHeaders(),
     });
+
     expect(missingIdempotencyKey.status).toBe(400);
 
     const earlyClose = await readActionResult(
@@ -501,12 +555,15 @@ describe("live auction API", () => {
         headers: await sellerHeaders("too-soon"),
       }),
     );
+
     expect(earlyClose.ok).toBe(false);
+
     if (!earlyClose.ok) expect(earlyClose.error.code).toBe("AUCTION_NOT_ENDED");
   });
 
   it("rejects forged identity before allocating an auction object", async () => {
     const objectsBefore = await listDurableObjectIds(env.AUCTIONS);
+
     const forged = await exports.default.fetch(
       new Request("https://auction.test/v1/auctions/forged-missing", {
         headers: {
@@ -515,38 +572,44 @@ describe("live auction API", () => {
         },
       }),
     );
+
     expect(forged.status).toBe(401);
     expect(await listDurableObjectIds(env.AUCTIONS)).toHaveLength(objectsBefore.length);
 
     const wrongIssuer = await tokenFor("seller-1", "seller", {
       issuer: "https://attacker.test",
     });
+
     const invalidJwt = await exports.default.fetch(
       new Request("https://auction.test/v1/auctions/forged-missing", {
         headers: { Authorization: `Bearer ${wrongIssuer}` },
       }),
     );
+
     expect(invalidJwt.status).toBe(401);
     expect(await listDurableObjectIds(env.AUCTIONS)).toHaveLength(objectsBefore.length);
   });
 
   it("returns request correlation and generated OpenAPI", async () => {
     const requestId = crypto.randomUUID();
+
     const health = await request("/health", {
       headers: { "X-Request-Id": requestId },
     });
+
     expect(health.headers.get("X-Request-Id")).toBe(requestId);
 
-    const document = await (
-      await request("/openapi.json")
-    ).json<{
-      openapi: string;
-      paths: Record<string, unknown>;
-      components: {
-        schemas: Record<string, unknown>;
-        securitySchemes: Record<string, unknown>;
-      };
-    }>();
+    const document = z
+      .object({
+        openapi: z.string(),
+        paths: z.record(z.string(), z.json()),
+        components: z.object({
+          schemas: z.record(z.string(), z.json()),
+          securitySchemes: z.record(z.string(), z.json()),
+        }),
+      })
+      .parse(await (await request("/openapi.json")).json());
+
     expect(document.openapi).toBe("3.1.0");
     expect(document.paths["/v1/auctions/{auctionId}/bids"]).toBeDefined();
     expect(document.paths["/v1/demo-session"]).toBeDefined();
@@ -564,12 +627,15 @@ describe("live auction API", () => {
         .exec<{ id: number }>("SELECT id FROM _sql_schema_migrations ORDER BY id")
         .toArray()
         .map((row) => row.id);
+
       expect(versions).toEqual([1, 2, 3, 4]);
+
       const idempotencyRecord = state.storage.sql
         .exec<{ response_json: string | null }>(
           "SELECT response_json FROM idempotency_records WHERE action_type = 'start'",
         )
         .one();
+
       expect(idempotencyRecord.response_json).not.toBeNull();
       expect(() => state.storage.sql.exec("UPDATE auction SET start_price_cents = 0")).toThrow(
         /auction invariant violated/,

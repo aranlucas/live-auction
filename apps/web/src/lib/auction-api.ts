@@ -52,6 +52,7 @@ export const defaultAuctionInput: CreateAuctionInput = createAuctionInputSchema.
 
 function apiEndpoint(apiBaseUrl: string, path: string): URL {
   const base = apiBaseUrl.endsWith("/") ? apiBaseUrl : `${apiBaseUrl}/`;
+
   return new URL(path.replace(/^\//, ""), base);
 }
 
@@ -76,10 +77,13 @@ export async function requestDemoSession(apiBaseUrl: string): Promise<TestRoomCo
   const response = await fetch(apiEndpoint(apiBaseUrl, "/v1/demo-session"), {
     method: "POST",
   });
+
   const result = demoSessionResultSchema.parse(await response.json());
+
   if (!result.ok) {
     throw new AuctionApiError(result.error.status, result.error.code, result.error.message);
   }
+
   return {
     apiBaseUrl,
     auctionId: result.auctionId,
@@ -97,10 +101,13 @@ export async function requestDemoBidderSession(
     apiEndpoint(apiBaseUrl, `/v1/demo-session/${encodeURIComponent(auctionId)}/bidder`),
     { method: "POST" },
   );
+
   const result = demoBidderSessionResultSchema.parse(await response.json());
+
   if (!result.ok) {
     throw new AuctionApiError(result.error.status, result.error.code, result.error.message);
   }
+
   return {
     apiBaseUrl,
     auctionId: result.auctionId,
@@ -122,6 +129,7 @@ async function request<T>(
   const value: unknown = await response.json();
   const result = schema.parse(value);
   const failure = operationFailureSchema.safeParse(result);
+
   if (failure.success) {
     throw new AuctionApiError(
       failure.data.error.status,
@@ -129,6 +137,7 @@ async function request<T>(
       failure.data.error.message,
     );
   }
+
   return result;
 }
 
@@ -148,6 +157,7 @@ export function readHistory(
   const url = endpoint(config, "/history");
   url.searchParams.set("afterSequence", "0");
   url.searchParams.set("limit", "100");
+
   return request(historyResultSchema, url, token, { signal });
 }
 
@@ -189,6 +199,7 @@ export function placeBid(
 export function realtimeUrl(config: TestRoomConfig): string {
   const url = endpoint(config, "/events");
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+
   return url.toString();
 }
 
@@ -196,7 +207,8 @@ export function bestReadToken(config: TestRoomConfig): string {
   return config.viewerToken || config.bidderToken || config.sellerToken;
 }
 
-export function errorMessage(error: unknown): string {
-  if (error instanceof AuctionApiError) return `${error.code}: ${error.message}`;
-  return error instanceof Error ? error.message : "The request failed";
+export function errorMessage(cause: unknown): string {
+  if (cause instanceof AuctionApiError) return `${cause.code}: ${cause.message}`;
+
+  return cause instanceof Error ? cause.message : "The request failed";
 }

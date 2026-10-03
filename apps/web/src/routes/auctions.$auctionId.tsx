@@ -13,6 +13,7 @@ export const Route = createFileRoute("/auctions/$auctionId")({
 function AuctionRoute() {
   const { auctionId } = Route.useParams();
   const search = Route.useSearch();
+
   return (
     <AuctionRoomPage
       routeAuctionId={auctionIdSchema.parse(auctionId)}

@@ -1,4 +1,4 @@
-import { importJWK, SignJWT, type JWK } from "jose";
+import { importJWK, SignJWT } from "jose";
 import { z } from "zod";
 import {
   demoBidderSessionSuccessSchema,
@@ -26,12 +26,14 @@ export interface DemoSessionEnvironment {
 export class DemoSessionConfigurationError extends Error {}
 
 let cachedPrivateJwk: string | undefined;
+
 let cachedSigningKey: Awaited<ReturnType<typeof importJWK>> | undefined;
 
 export async function createDemoSession(env: DemoSessionEnvironment): Promise<DemoSessionSuccess> {
   const suffix = randomSuffix();
   const auctionId = `demo-${suffix}`;
   const expiresAt = expirationTime();
+
   const [sellerToken, bidderToken, viewerToken] = await Promise.all([
     issueToken(env, "seller", auctionId, `demo-seller-${suffix}`, expiresAt),
     issueToken(env, "bidder", auctionId, `demo-bidder-${suffix}`, expiresAt),
@@ -74,11 +76,13 @@ async function issueToken(
   expiresAt: number,
 ): Promise<string> {
   const privateJwk = env.DEMO_AUTH_PRIVATE_JWK;
+
   if (!privateJwk) {
     throw new DemoSessionConfigurationError("Demo session signing is not configured");
   }
 
   let jwk: z.infer<typeof privateJwkSchema>;
+
   try {
     jwk = privateJwkSchema.parse(JSON.parse(privateJwk));
   } catch {
@@ -87,9 +91,10 @@ async function issueToken(
 
   try {
     if (!cachedSigningKey || cachedPrivateJwk !== privateJwk) {
-      cachedSigningKey = await importJWK(jwk as JWK, "ES256");
+      cachedSigningKey = await importJWK(jwk, "ES256");
       cachedPrivateJwk = privateJwk;
     }
+
     const signingKey = cachedSigningKey;
 
     return new SignJWT({ role, auctionId })

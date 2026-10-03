@@ -9,6 +9,7 @@ export default defineWranglerConfig((ctx) => {
         },
       };
     }
+
     default: {
       return {
         types: {

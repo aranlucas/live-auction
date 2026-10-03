@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { importJWK, SignJWT, type JWK } from "jose";
+import { importJWK, SignJWT } from "jose";
 import { z } from "zod";
 
 const privateJwkSchema = z
@@ -23,7 +23,8 @@ export async function issueToken(
 ): Promise<string> {
   const path = options.privateJwkPath ?? ".auction-auth-private.jwk";
   const jwk = privateJwkSchema.parse(JSON.parse(await readFile(path, "utf8")));
-  const key = await importJWK(jwk as JWK, "ES256");
+  const key = await importJWK(jwk, "ES256");
+
   return new SignJWT({ role })
     .setProtectedHeader({ alg: "ES256", kid: jwk.kid })
     .setSubject(subject)

@@ -10,15 +10,19 @@ const argumentsSchema = z.strictObject({
 });
 
 const values = new Map<string, string>();
+
 const cliArguments = process.argv.slice(2).filter((argument) => argument !== "--");
+
 for (let index = 0; index < cliArguments.length; index += 2) {
   const key = cliArguments[index];
   const value = cliArguments[index + 1];
+
   if (!key?.startsWith("--") || value === undefined) {
     throw new Error(
       "Usage: pnpm auth:token -- --subject <id> --role <role> [--issuer <url>] [--audience <aud>]",
     );
   }
+
   values.set(key.slice(2), value);
 }
 
