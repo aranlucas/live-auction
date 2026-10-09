@@ -919,7 +919,7 @@ export class Auction extends DurableObject<Env> {
     });
 
     const deliveries = Array.from({ length: FANOUT_SHARD_COUNT }, (_, shard) =>
-      this.env.AUCTION_FANOUT.getByName(`${result.auction.id}:${shard}`).publish(message),
+      this.ctx.exports.AuctionFanout.getByName(`${result.auction.id}:${shard}`).publish(message),
     );
 
     this.ctx.waitUntil(

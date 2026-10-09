@@ -427,7 +427,7 @@ describe("live auction API", () => {
 
     if (accepted.ok) {
       expect(accepted.auction.endsAt).toBe(before.auction.endsAt + 15_000);
-      await runInDurableObject(env.AUCTIONS.getByName(id), async (_instance, state) => {
+      await runInDurableObject(exports.Auction.getByName(id), async (_instance, state) => {
         expect(await state.storage.getAlarm()).toBe(accepted.auction.endsAt);
       });
     }
@@ -447,7 +447,7 @@ describe("live auction API", () => {
 
     expect(original.ok).toBe(true);
 
-    const stub = env.AUCTIONS.getByName(id);
+    const stub = exports.Auction.getByName(id);
     await runInDurableObject(stub, async (_instance, state) => {
       state.storage.sql.exec("UPDATE auction SET ends_at = ?", Date.now() - 1);
       await state.storage.setAlarm(Date.now() + 60_000);
@@ -488,7 +488,7 @@ describe("live auction API", () => {
       body: JSON.stringify({ amountCents: 1_000 }),
     });
 
-    const stub = env.AUCTIONS.getByName(id);
+    const stub = exports.Auction.getByName(id);
     await runInDurableObject(stub, async (instance: Auction, state) => {
       expect(instance).toBeInstanceOf(Auction);
       state.storage.sql.exec("UPDATE auction SET ends_at = ?", Date.now() - 1);
@@ -626,7 +626,7 @@ describe("live auction API", () => {
   it("applies numbered migrations and database invariants", async () => {
     const id = "schema-invariants";
     await createAndStart(id);
-    await runInDurableObject(env.AUCTIONS.getByName(id), async (_instance, state) => {
+    await runInDurableObject(exports.Auction.getByName(id), async (_instance, state) => {
       const versions = state.storage.sql
         .exec<{ id: number }>("SELECT id FROM _sql_schema_migrations ORDER BY id")
         .toArray()

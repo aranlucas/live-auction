@@ -101,7 +101,7 @@ export class AuctionFanout extends DurableObject<Env> {
     server.serializeAttachment({ ready: false, cursor: afterSequence ?? 0 });
 
     const bootstrap =
-      await this.env.AUCTIONS.getByName(auctionId).getRealtimeBootstrap(afterSequence);
+      await this.ctx.exports.Auction.getByName(auctionId).getRealtimeBootstrap(afterSequence);
 
     if (!bootstrap.ok) {
       server.close(1008, bootstrap.error.code);

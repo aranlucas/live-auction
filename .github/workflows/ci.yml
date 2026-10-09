@@ -31,7 +31,7 @@ jobs:
 
       - parallel:
           - name: Typecheck
-            run: pnpm types:check && pnpm typecheck
+            run: pnpm typecheck
 
           - name: Lint
             run: pnpm lint && pnpm format:check && pnpm openapi:check

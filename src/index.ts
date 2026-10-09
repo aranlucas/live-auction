@@ -1,3 +1,4 @@
+import { exports } from "cloudflare:workers";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { zValidator } from "@hono/zod-validator";
 import { bodyLimit } from "hono/body-limit";
@@ -316,7 +317,7 @@ app.post("/v1/demo-session/:auctionId/bidder", auctionParams, async (context) =>
     return jsonFailure(429, "RATE_LIMITED", "Too many demo bidders; retry after the rate window");
   }
 
-  const auction = await context.env.AUCTIONS.getByName(auctionId).getAuction();
+  const auction = await exports.Auction.getByName(auctionId).getAuction();
   const expectedSellerId = `demo-seller-${auctionId.slice("demo-".length)}`;
 
   if (!auction.ok || auction.auction.sellerId !== expectedSellerId) {
@@ -348,7 +349,7 @@ app.put(
     const { auctionId } = context.req.valid("param");
     const input = context.req.valid("json");
 
-    const result = await context.env.AUCTIONS.getByName(auctionId).createAuction(
+    const result = await exports.Auction.getByName(auctionId).createAuction(
       auctionId,
       context.get("actor").id,
       input,
@@ -360,7 +361,7 @@ app.put(
 
 app.get("/v1/auctions/:auctionId", auctionParams, async (context) => {
   const { auctionId } = context.req.valid("param");
-  const result = await context.env.AUCTIONS.getByName(auctionId).getAuction();
+  const result = await exports.Auction.getByName(auctionId).getAuction();
 
   return json(result, result.ok ? 200 : result.error.status);
 });
@@ -369,7 +370,7 @@ app.get("/v1/auctions/:auctionId/history", auctionParams, historyQuery, async (c
   const { auctionId } = context.req.valid("param");
   const query = context.req.valid("query");
 
-  const result = await context.env.AUCTIONS.getByName(auctionId).getHistory(
+  const result = await exports.Auction.getByName(auctionId).getHistory(
     query.afterSequence,
     query.limit,
   );
@@ -386,7 +387,7 @@ app.post(
     const { auctionId } = context.req.valid("param");
     const headers = context.req.valid("header");
 
-    const result = await context.env.AUCTIONS.getByName(auctionId).startAuction(
+    const result = await exports.Auction.getByName(auctionId).startAuction(
       context.get("actor").id,
       headers["idempotency-key"],
     );
@@ -406,7 +407,7 @@ app.post(
     const headers = context.req.valid("header");
     const { amountCents } = context.req.valid("json");
 
-    const result = await context.env.AUCTIONS.getByName(auctionId).placeBid(
+    const result = await exports.Auction.getByName(auctionId).placeBid(
       context.get("actor").id,
       headers["idempotency-key"],
       amountCents,
@@ -425,7 +426,7 @@ app.post(
     const { auctionId } = context.req.valid("param");
     const headers = context.req.valid("header");
 
-    const result = await context.env.AUCTIONS.getByName(auctionId).closeAuction(
+    const result = await exports.Auction.getByName(auctionId).closeAuction(
       context.get("actor").id,
       headers["idempotency-key"],
     );
@@ -443,7 +444,7 @@ app.post(
     const { auctionId } = context.req.valid("param");
     const headers = context.req.valid("header");
 
-    const result = await context.env.AUCTIONS.getByName(auctionId).cancelAuction(
+    const result = await exports.Auction.getByName(auctionId).cancelAuction(
       context.get("actor").id,
       headers["idempotency-key"],
     );
@@ -471,7 +472,7 @@ app.get(
     headers.set("Sec-WebSocket-Protocol", "auction.v1");
     headers.set("X-Auction-Id", auctionId);
 
-    return context.env.AUCTION_FANOUT.getByName(`${auctionId}:${shard}`).fetch(
+    return exports.AuctionFanout.getByName(`${auctionId}:${shard}`).fetch(
       new Request(context.req.raw, { headers }),
     );
   },

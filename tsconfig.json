@@ -4,9 +4,10 @@
     "lib": ["ES2024"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,
-    "types": ["./worker-configuration.d.ts"]
+    "types": ["./.cloudflare/types/index.d.ts"]
   },
-  "include": ["src/**/*.ts", "worker-configuration.d.ts"]
+  "include": ["src/**/*.ts", ".cloudflare/types/index.d.ts"]
 }
