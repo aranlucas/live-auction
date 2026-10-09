@@ -674,9 +674,9 @@ flowchart LR
 
 The Edge API / Gateway handles public requests but does not own auction state. A Cloudflare Worker
 running Hono performs this role. Its middleware authenticates, validates, and rate limits a request
-before calling the named Durable Object binding.
+before calling the Durable Object through `ctx.exports`.
 
-An `auctionStub` helper would add no value. `env.AUCTIONS.getByName(id)` already returns Cloudflare's
+An `auctionStub` helper would add no value. `exports.Auction.getByName(id)` already returns Cloudflare's
 typed RPC reference to the remote object. Importing the `Auction` class would call local code. That
 would skip the remote object's identity, storage, and ordered execution boundary.
 

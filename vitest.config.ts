@@ -5,8 +5,10 @@ export default defineConfig({
   test: { include: ["test/**/*.spec.ts"] },
   plugins: [
     cloudflareTest({
-      wrangler: { configPath: "./wrangler.jsonc" },
+      experimental: { newConfig: { configPath: "./cloudflare.config.ts" } },
       miniflare: {
+        // Test-only: listDurableObjectIds() can only list namespaces bound in env.
+        durableObjects: { AUCTIONS: "Auction" },
         bindings: {
           ENVIRONMENT: "test",
           DEMO_MODE: "enabled",

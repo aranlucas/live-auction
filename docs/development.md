@@ -31,14 +31,14 @@ Use **Room setup → Advanced setup** to enter a different API URL and auction c
 
 The local API config uses the default issuer `https://cloudflare-live-auction.example` and audience
 `cloudflare-live-auction`. To issue local tokens and create local demo sessions, generate a keypair
-and configure Wrangler to verify the matching public key:
+and configure the local API to verify the matching public key:
 
 ```sh
 pnpm auth:keygen
 ```
 
 The command writes `.auction-auth-private.jwk` and `.auction-auth-public.jwks.json` in the root and
-prints a `wranglerValue` containing the public JWKS. Copy that public JWKS into the root `.dev.vars`
+prints a `publicJwksValue` containing the public JWKS. Copy that public JWKS into the root `.dev.vars`
 as `AUTH_JWKS_JSON`, and copy the private JWK from `.auction-auth-private.jwk` into the same file as
 `DEMO_AUTH_PRIVATE_JWK`. `.dev.vars` and both key files are ignored by Git. Do not put the private
 JWK in source control or share it.

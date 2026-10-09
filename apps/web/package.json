@@ -8,14 +8,13 @@
   "scripts": {
     "dev": "portless run --name live-auction vite dev",
     "generate-routes": "tsr generate",
-    "build": "vite build && tsc --noEmit",
-    "lint": "oxlint --deny-warnings --type-aware src test vite.config.ts vitest.config.ts",
-    "typecheck": "tsc --noEmit",
+    "build": "vite build && pnpm typecheck",
+    "lint": "pnpm types && oxlint --deny-warnings --type-aware src test vite.config.ts vitest.config.ts",
+    "typecheck": "pnpm types && tsc --noEmit",
     "preview": "vite preview",
-    "deploy": "pnpm run build && cf deploy --prebuilt",
-    "deploy:dry-run": "pnpm run build && cf deploy --prebuilt --dry-run",
-    "types": "wrangler types",
-    "types:check": "wrangler types --check",
+    "deploy": "pnpm run build && cf deploy --prebuilt --mode production",
+    "deploy:dry-run": "pnpm run build && cf deploy --prebuilt --dry-run --mode production",
+    "types": "cf workers types",
     "test": "vitest run",
     "test:render": "node --test test/render-smoke.test.mjs"
   },
@@ -42,10 +41,9 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "cf": "1.0.0-beta.10",
+    "cf": "1.0.0-beta.14",
     "happy-dom": "20.14.5",
     "typescript": "^7.0.2",
-    "vite": "^8.0.0",
-    "wrangler": "^4.143.0"
+    "vite": "^8.0.0"
   }
 }

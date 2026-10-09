@@ -1,4 +1,4 @@
-import { env, exports } from "cloudflare:workers";
+import { exports } from "cloudflare:workers";
 import { evictDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import {
@@ -128,7 +128,7 @@ describe("Durable Object integration behavior", () => {
     expect((await placeBid(id, "bidder-a", 1_000, "eviction-bid-a")).status).toBe(200);
     expect((await placeBid(id, "bidder-b", 1_100, "eviction-bid-b")).status).toBe(200);
 
-    await evictDurableObject(env.AUCTIONS.getByName(id));
+    await evictDurableObject(exports.Auction.getByName(id));
 
     const state = readResultSchema.parse(await (await request(`/v1/auctions/${id}`)).json());
     expect(state.ok).toBe(true);
@@ -171,10 +171,10 @@ describe("Durable Object integration behavior", () => {
     expect(snapshot.type).toBe("auction.snapshot");
     expect(snapshot.auction.state).toBe("LIVE");
 
-    await evictDurableObject(env.AUCTIONS.getByName(id));
+    await evictDurableObject(exports.Auction.getByName(id));
 
     for (let shard = 0; shard < 4; shard += 1) {
-      await evictDurableObject(env.AUCTION_FANOUT.getByName(`${id}:${shard}`));
+      await evictDurableObject(exports.AuctionFanout.getByName(`${id}:${shard}`));
     }
 
     const pong = nextSocketMessage(socket);
@@ -269,7 +269,7 @@ describe("Durable Object integration behavior", () => {
     );
 
     expect(cancelled.ok && cancelled.auction.state).toBe("CANCELLED");
-    expect(await runDurableObjectAlarm(env.AUCTIONS.getByName(id))).toBe(false);
+    expect(await runDurableObjectAlarm(exports.Auction.getByName(id))).toBe(false);
 
     const late = auctionActionResultSchema.parse(
       await (await placeBid(id, "late-bidder", 1_000, "cancelled-late-bid")).json(),

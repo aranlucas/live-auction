@@ -1,5 +1,4 @@
 node_modules/
-.wrangler/
 *.cpuprofile
 .dev.vars
 .auction-auth-private.jwk

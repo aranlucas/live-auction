@@ -37,6 +37,6 @@ console.log(
   JSON.stringify({
     privateKey: privatePath,
     publicJwks: publicPath,
-    wranglerValue: JSON.stringify(jwks),
+    publicJwksValue: JSON.stringify(jwks),
   }),
 );
