@@ -10,7 +10,22 @@ From the repository root:
 
 ```bash
 pnpm install
+npm install -g portless@0.15.7 # requires Node.js 24+
 pnpm --filter gavel-live-web dev
+```
+
+Open the printed URL, normally `https://live-auction.localhost`. Start the local API
+with `pnpm dev` in another terminal and follow the [local setup](../../README.md#local-urls-with-portless)
+for its exact CORS origin and local test identities. Select the local API in
+**Room setup → Advanced setup**.
+
+### Staging demo preview
+
+The staging demo currently allows the direct localhost origin. Use this fallback
+when previewing staging:
+
+```bash
+pnpm --filter gavel-live-web dev:direct
 ```
 
 Open `http://localhost:3000` and select **Launch instant demo**. The app creates a scoped,
@@ -40,6 +55,15 @@ Paste the tokens into advanced setup, choose a unique auction ID, then exercise 
 
 Tokens are kept in `sessionStorage`, never persisted on the server, and are sent only to the API
 URL shown in Setup. The included development signing key is for this system-design model only.
+
+
+## Local URLs with Portless
+
+From the repository root, use `pnpm --filter gavel-live-web dev`.
+See the [root setup](../../README.md#local-urls-with-portless) for the pinned CLI,
+the separate local API command, exact CORS origin, and local test identities.
+The default browser URL is `https://live-auction.localhost`;
+`pnpm --filter gavel-live-web dev:direct` remains the fixed-port option.
 
 ## Architecture
 
