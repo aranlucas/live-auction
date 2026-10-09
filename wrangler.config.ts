@@ -12,6 +12,10 @@ export default defineWranglerConfig((ctx) => {
 
     default: {
       return {
+        dev: {
+          // Portless assigns PORT; Wrangler does not read it on its own.
+          port: Number(process.env.PORT) || undefined,
+        },
         types: {
           generate: false,
         },

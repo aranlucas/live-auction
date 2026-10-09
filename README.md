@@ -6,12 +6,14 @@ Gavel Live is a live-auction demo built with Cloudflare Workers, Durable Objects
 
 ## Run locally
 
-Requires Node.js 22+ and pnpm.
+Requires Node.js 24+ and pnpm.
 
 ```bash
 pnpm install
 pnpm dev
 ```
+
+`pnpm dev` serves the API at `https://api.live-auction.localhost` and `pnpm --filter gavel-live-web dev` serves the web client at `https://live-auction.localhost`, both through [Portless](https://github.com/vercel-labs/portless) (a dev dependency); its first run may ask for `sudo` to bind port 443 and trust a local certificate.
 
 Run all local checks with:
 

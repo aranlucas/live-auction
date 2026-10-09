@@ -13,7 +13,7 @@ pnpm install
 pnpm --filter gavel-live-web dev
 ```
 
-Open `http://localhost:3000` and select **Launch instant demo**. The app creates a scoped,
+Open `https://live-auction.localhost` and select **Launch instant demo**. The app creates a scoped,
 15-minute staging room, creates the camera lot, starts it, and connects the event stream. You can
 bid immediately. The browser moves to the room's canonical `/auctions/{auctionId}` URL.
 
