@@ -39,7 +39,8 @@ Paste the tokens into advanced setup, choose a unique auction ID, then exercise 
 4. Watch REST results, the realtime connection, activity, and ordered event ledger update together.
 
 Tokens are kept in `sessionStorage`, never persisted on the server, and are sent only to the API
-URL shown in Setup. The included development signing key is for this system-design model only.
+URL shown in Setup. For local JWT setup and the complete API contract, see the repository's
+[development](../../docs/development.md) and [API](../../docs/api.md) guides.
 
 ## Architecture
 
