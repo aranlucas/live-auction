@@ -17,8 +17,7 @@
     "types": "wrangler types",
     "types:check": "wrangler types --check",
     "test": "vitest run",
-    "test:render": "node --test test/render-smoke.test.mjs",
-    "dev:direct": "vite dev --port 3000"
+    "test:render": "node --test test/render-smoke.test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",

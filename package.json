@@ -25,8 +25,7 @@
     "types": "wrangler types",
     "types:check": "wrangler types --check",
     "build:worker": "wrangler build --experimental-new-config --experimental-cf-build-output",
-    "lint:anti-slop": "oxlint .",
-    "dev:direct": "wrangler dev --experimental-new-config"
+    "lint:anti-slop": "oxlint ."
   },
   "dependencies": {
     "@hono/zod-openapi": "^1.6.3",

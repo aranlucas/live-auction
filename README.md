@@ -40,8 +40,7 @@ Use the URL printed by Portless if you have changed its proxy port, TLS, or TLD.
 Linked Git worktrees get a branch prefix, so each checkout has its own origin.
 The first HTTPS run can request local administrator permission to bind port 443,
 trust its development certificate, and synchronize local hostnames. Ctrl+C stops
-the child server and removes its route. The direct fallback below starts the
-server without the proxy.
+the child server and removes its route.
 
 Start the web client in a second terminal:
 
@@ -57,6 +56,5 @@ setup**, select the local API URL and use the existing local test-token workflow
 The default instant demo points at staging, whose existing allowlist does not
 automatically accept a new local origin. No staging allowlist is changed here.
 
-Use `pnpm dev:direct` and `pnpm --filter gavel-live-web dev:direct` for the existing localhost
-workflow. Signing keys, authentication checks, and deployed Worker settings stay
-with their existing setup.
+Signing keys, authentication checks, and deployed Worker settings stay with their
+existing setup.

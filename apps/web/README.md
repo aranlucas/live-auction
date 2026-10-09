@@ -21,11 +21,11 @@ for its exact CORS origin and local test identities. Select the local API in
 
 ### Staging demo preview
 
-The staging demo currently allows the direct localhost origin. Use this fallback
-when previewing staging:
+The staging demo currently allows `http://localhost:3000`. Start Vite on that
+origin when previewing staging:
 
 ```bash
-pnpm --filter gavel-live-web dev:direct
+pnpm --filter gavel-live-web exec vite dev --port 3000 --strictPort
 ```
 
 Open `http://localhost:3000` and select **Launch instant demo**. The app creates a scoped,
@@ -56,14 +56,12 @@ Paste the tokens into advanced setup, choose a unique auction ID, then exercise 
 Tokens are kept in `sessionStorage`, never persisted on the server, and are sent only to the API
 URL shown in Setup. The included development signing key is for this system-design model only.
 
-
 ## Local URLs with Portless
 
 From the repository root, use `pnpm --filter gavel-live-web dev`.
 See the [root setup](../../README.md#local-urls-with-portless) for the pinned CLI,
 the separate local API command, exact CORS origin, and local test identities.
-The default browser URL is `https://live-auction.localhost`;
-`pnpm --filter gavel-live-web dev:direct` remains the fixed-port option.
+The default browser URL is `https://live-auction.localhost`.
 
 ## Architecture
 
