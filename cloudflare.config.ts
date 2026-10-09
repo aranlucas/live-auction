@@ -31,7 +31,7 @@ export default defineConfig((ctx) => {
             AUTH_AUDIENCE: bindings.text("cloudflare-live-auction"),
             AUTH_JWKS_URL: bindings.text(""),
             WEB_ORIGINS: bindings.text(
-              "http://localhost:3000,https://gavel-live-web.aranlucas.workers.dev",
+              "https://live-auction.localhost,https://gavel-live-web.aranlucas.workers.dev",
             ),
             AUTH_JWKS_JSON: bindings.text(
               '{"keys":[{"kty":"EC","x":"YPrGDt7Vu1jwOGcQFdVDfbgQjiBe_Ds_8d_nKhVGeX8","y":"TpHR0QvFesA5VUnYeLLk2r_sPCJwMoVg3VPxR4I1gb4","crv":"P-256","alg":"ES256","use":"sig","kid":"6332bef5-8e80-4ef0-8022-8ed9ebd78377"}]}',
@@ -92,7 +92,7 @@ export default defineConfig((ctx) => {
             AUTH_AUDIENCE: bindings.text("cloudflare-live-auction"),
             AUTH_JWKS_URL: bindings.text(""),
             WEB_ORIGINS: bindings.text(
-              "http://localhost:3000,https://gavel-live-web.aranlucas.workers.dev",
+              "https://live-auction.localhost,https://gavel-live-web.aranlucas.workers.dev",
             ),
             AUTH_JWKS_JSON: bindings.text(
               '{"keys":[{"kty":"EC","x":"YPrGDt7Vu1jwOGcQFdVDfbgQjiBe_Ds_8d_nKhVGeX8","y":"TpHR0QvFesA5VUnYeLLk2r_sPCJwMoVg3VPxR4I1gb4","crv":"P-256","alg":"ES256","use":"sig","kid":"6332bef5-8e80-4ef0-8022-8ed9ebd78377"}]}',

@@ -80,7 +80,7 @@ describe("live auction API", () => {
       new Request("https://auction.test/v1/auctions/browser-room", {
         method: "OPTIONS",
         headers: {
-          Origin: "http://localhost:3000",
+          Origin: "https://live-auction.localhost",
           "Access-Control-Request-Method": "PUT",
           "Access-Control-Request-Headers": "authorization,content-type,idempotency-key",
         },
@@ -88,7 +88,9 @@ describe("live auction API", () => {
     );
 
     expect(response.status).toBe(204);
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:3000");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://live-auction.localhost",
+    );
     expect(response.headers.get("Access-Control-Allow-Methods")).toContain("PUT");
     expect(response.headers.get("Access-Control-Allow-Headers")).toContain("Authorization");
     expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id");
@@ -109,14 +111,16 @@ describe("live auction API", () => {
       new Request("https://auction.test/v1/demo-session", {
         method: "OPTIONS",
         headers: {
-          Origin: "http://localhost:3000",
+          Origin: "https://live-auction.localhost",
           "Access-Control-Request-Method": "POST",
         },
       }),
     );
 
     expect(demoPreflight.status).toBe(204);
-    expect(demoPreflight.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:3000");
+    expect(demoPreflight.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://live-auction.localhost",
+    );
   });
 
   it("creates a short-lived demo room whose tokens cannot cross auction boundaries", async () => {

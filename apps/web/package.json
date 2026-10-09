@@ -6,7 +6,7 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "portless run --name live-auction vite dev --host 127.0.0.1",
+    "dev": "portless run --name live-auction vite dev",
     "generate-routes": "tsr generate",
     "build": "vite build && tsc --noEmit",
     "lint": "oxlint --deny-warnings --type-aware src test vite.config.ts vitest.config.ts",

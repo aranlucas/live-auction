@@ -10,7 +10,7 @@
     "AUTH_ISSUER": "https://cloudflare-live-auction.example",
     "AUTH_AUDIENCE": "cloudflare-live-auction",
     "AUTH_JWKS_URL": "",
-    "WEB_ORIGINS": "http://localhost:3000,https://gavel-live-web.aranlucas.workers.dev",
+    "WEB_ORIGINS": "https://live-auction.localhost,https://gavel-live-web.aranlucas.workers.dev",
     "AUTH_JWKS_JSON": "{\"keys\":[{\"kty\":\"EC\",\"x\":\"YPrGDt7Vu1jwOGcQFdVDfbgQjiBe_Ds_8d_nKhVGeX8\",\"y\":\"TpHR0QvFesA5VUnYeLLk2r_sPCJwMoVg3VPxR4I1gb4\",\"crv\":\"P-256\",\"alg\":\"ES256\",\"use\":\"sig\",\"kid\":\"6332bef5-8e80-4ef0-8022-8ed9ebd78377\"}]}",
   },
   "durable_objects": {
@@ -49,7 +49,7 @@
         "AUTH_ISSUER": "https://cloudflare-live-auction.example",
         "AUTH_AUDIENCE": "cloudflare-live-auction",
         "AUTH_JWKS_URL": "",
-        "WEB_ORIGINS": "http://localhost:3000,https://gavel-live-web.aranlucas.workers.dev",
+        "WEB_ORIGINS": "https://live-auction.localhost,https://gavel-live-web.aranlucas.workers.dev",
         "AUTH_JWKS_JSON": "{\"keys\":[{\"kty\":\"EC\",\"x\":\"YPrGDt7Vu1jwOGcQFdVDfbgQjiBe_Ds_8d_nKhVGeX8\",\"y\":\"TpHR0QvFesA5VUnYeLLk2r_sPCJwMoVg3VPxR4I1gb4\",\"crv\":\"P-256\",\"alg\":\"ES256\",\"use\":\"sig\",\"kid\":\"6332bef5-8e80-4ef0-8022-8ed9ebd78377\"}]}",
       },
       "durable_objects": {
