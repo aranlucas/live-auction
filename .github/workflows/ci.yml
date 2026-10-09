@@ -29,21 +29,20 @@ jobs:
           cache: true
           require-lockfile: true
 
-      - parallel:
-          - name: Typecheck
-            run: pnpm typecheck
+      - name: Typecheck
+        run: pnpm typecheck
 
-          - name: Lint
-            run: pnpm lint && pnpm format:check && pnpm openapi:check
+      - name: Lint
+        run: pnpm lint && pnpm format:check && pnpm openapi:check
 
-          - name: Test
-            run: pnpm test
+      - name: Test
+        run: pnpm test
 
-          - name: Build web, render tests, and dry run
-            run: pnpm --filter gavel-live-web build && pnpm --filter gavel-live-web test:render && pnpm --filter gavel-live-web deploy:dry-run
+      - name: Build web, render tests, and dry run
+        run: pnpm --filter gavel-live-web build && pnpm --filter gavel-live-web test:render && pnpm --filter gavel-live-web deploy:dry-run
 
-          - name: Worker deploy dry run
-            run: pnpm deploy:dry-run
+      - name: Worker deploy dry run
+        run: pnpm deploy:dry-run
 
       - name: Check patch hygiene
         run: git diff --check
