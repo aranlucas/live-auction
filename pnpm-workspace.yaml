@@ -10,8 +10,10 @@ autoInstallPeers: false
 minimumReleaseAgeExclude:
   - "@cloudflare/codemods@0.2.1"
   - cf@1.0.0-beta.10
-  - wrangler@4.143.0
+  - wrangler@4.143.0 || 4.149.0
   - "@cloudflare/vite-plugin@2.0.0-beta.sha-ad79608dd"
+  - "@cloudflare/vitest-plugin@1.4.0"
+  - miniflare@5.20261006.1-alpha
 overrides:
   "js-yaml@4": 4.3.2
   "undici@7": 7.29.1
