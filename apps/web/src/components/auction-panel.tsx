@@ -103,7 +103,7 @@ export function AuctionPanel({
     onSubmit: async ({ value }) => {
       const cents = Math.round(Number(value.amount) * 100);
 
-      if (Number.isFinite(cents) && cents >= nextMinimum) await onBid(cents);
+      if (Number.isFinite(cents) && cents >= nextMinimum) {await onBid(cents);}
     },
   });
 

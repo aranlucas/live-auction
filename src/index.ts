@@ -537,7 +537,7 @@ function formatValidationError(error: {
 function json<T>(value: T, status = 200, requestId?: string): Response {
   const headers = new Headers({ "Cache-Control": "no-store" });
 
-  if (requestId) headers.set("X-Request-Id", requestId);
+  if (requestId) {headers.set("X-Request-Id", requestId);}
 
   return Response.json(value, { status, headers });
 }

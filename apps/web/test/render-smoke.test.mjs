@@ -46,7 +46,7 @@ before(async () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    if (preview?.exitCode !== null && preview?.exitCode !== undefined) break;
+    if (preview?.exitCode !== null && preview?.exitCode !== undefined) {break;}
   }
 
   throw new Error(`Local preview did not start.\n${output}`);

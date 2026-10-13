@@ -71,7 +71,7 @@ const sellerHeaders = async (key?: string): Promise<Record<string, string>> => {
     Authorization: `Bearer ${await issueToken("integration-seller", "seller", authOptions)}`,
   };
 
-  if (key) headers["Idempotency-Key"] = key;
+  if (key) {headers["Idempotency-Key"] = key;}
 
   return headers;
 };
@@ -182,15 +182,15 @@ function webSocketMessages(socket: WebSocket) {
     const message = String(event.data);
     const resolve = waiting.shift();
 
-    if (resolve) resolve(message);
-    else queued.push(message);
+    if (resolve) {resolve(message);}
+    else {queued.push(message);}
   });
 
   return {
     next(timeoutMs = 5_000): Promise<string> {
       const queuedMessage = queued.shift();
 
-      if (queuedMessage !== undefined) return Promise.resolve(queuedMessage);
+      if (queuedMessage !== undefined) {return Promise.resolve(queuedMessage);}
 
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(
@@ -222,7 +222,8 @@ async function pollUntilClosed(id: string, timeoutMs = 12_000) {
   while (Date.now() < deadline) {
     const state = readResultSchema.parse(await (await api(`/v1/auctions/${id}`)).json());
 
-    if (state.ok && state.auction.state === "CLOSED") return state;
+    if (state.ok && state.auction.state === "CLOSED") {return state;}
+
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
@@ -252,7 +253,8 @@ async function writeIntegrationReport(summary: {
     amountCents: number | null;
   }>;
 }): Promise<string | undefined> {
-  if (!reportPath) return undefined;
+  if (!reportPath) {return undefined;}
+
   const maximumDuration = Math.max(...summary.checks.map((item) => item.durationMs), 1);
 
   const checkCards = summary.checks
@@ -516,12 +518,13 @@ async function main(): Promise<void> {
   assert.equal(accepted.length, 1);
   assert.equal(burst.filter(({ response }) => response.status === 409).length, 23);
   const acceptedAttempt = accepted[0];
-  assert(acceptedAttempt);
+  assert.ok(acceptedAttempt);
 
   const bidEvent = realtimeMessageSchema.parse(JSON.parse(await messages.next()));
   assert.equal(bidEvent.type, "auction.event");
 
-  if (bidEvent.type === "auction.event") assert.equal(bidEvent.event.type, "bid.accepted");
+  if (bidEvent.type === "auction.event") {assert.equal(bidEvent.event.type, "bid.accepted");}
+
   checks.push({
     name: "WebSocket bid fanout",
     durationMs: 0,
@@ -559,7 +562,7 @@ async function main(): Promise<void> {
       assert.equal(reused.response.status, 409);
       assert.equal(reused.result.ok, false);
 
-      if (!reused.result.ok) assert.equal(reused.result.error.code, "IDEMPOTENCY_KEY_REUSED");
+      if (!reused.result.ok) {assert.equal(reused.result.error.code, "IDEMPOTENCY_KEY_REUSED");}
 
       return reused.result;
     },
@@ -573,7 +576,7 @@ async function main(): Promise<void> {
       assert.equal(low.response.status, 409);
       assert.equal(low.result.ok, false);
 
-      if (!low.result.ok) assert.equal(low.result.error.code, "BID_TOO_LOW");
+      if (!low.result.ok) {assert.equal(low.result.error.code, "BID_TOO_LOW");}
 
       return low.result;
     },

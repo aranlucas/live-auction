@@ -125,7 +125,7 @@ export function AuctionRoomPage({
 
         setConfig(nextConfig);
 
-        if (!routeAuctionId) navigateToAuction(nextConfig);
+        if (!routeAuctionId) {navigateToAuction(nextConfig);}
       }
     } catch {
       window.sessionStorage.removeItem(storageKey);
@@ -139,9 +139,9 @@ export function AuctionRoomPage({
 
   const mutation = useMutation({
     mutationFn: async (action: RoomAction) => {
-      if (action.type === "create") return createAuction(config);
+      if (action.type === "create") {return createAuction(config);}
 
-      if (action.type === "bid") return placeBid(config, action.amountCents);
+      if (action.type === "bid") {return placeBid(config, action.amountCents);}
 
       return command(config, action.action);
     },
@@ -207,7 +207,8 @@ export function AuctionRoomPage({
   };
 
   useEffect(() => {
-    if (!storageReady || !autoJoin || !routeAuctionId || autoJoinStarted.current) return;
+    if (!storageReady || !autoJoin || !routeAuctionId || autoJoinStarted.current) {return;}
+
     autoJoinStarted.current = true;
     joinMutation.mutate();
   }, [autoJoin, joinMutation, routeAuctionId, storageReady]);

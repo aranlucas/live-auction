@@ -52,7 +52,8 @@ export async function authenticate(request: Request, env: Env): Promise<Actor> {
       auctionId: claims.auctionId,
     });
   } catch (error) {
-    if (error instanceof AuthenticationError) throw error;
+    if (error instanceof AuthenticationError) {throw error;}
+
     throw new AuthenticationError("UNAUTHENTICATED", "The access token is invalid or expired");
   }
 }
@@ -67,7 +68,7 @@ export function websocketProtocols(request: Request): string[] {
 function extractBearerToken(request: Request): string | null {
   const authorization = request.headers.get("Authorization");
 
-  if (authorization?.startsWith("Bearer ")) return authorization.slice("Bearer ".length);
+  if (authorization?.startsWith("Bearer ")) {return authorization.slice("Bearer ".length);}
 
   const authProtocol = websocketProtocols(request).find((protocol) => protocol.startsWith("auth."));
 
@@ -82,7 +83,8 @@ function createVerifier(env: Env) {
       const cacheKey = `remote:${jwksUrl}`;
       const cached = verifierCache.get(cacheKey);
 
-      if (cached) return cached;
+      if (cached) {return cached;}
+
       const verifier = createRemoteJWKSet(new URL(jwksUrl));
       verifierCache.set(cacheKey, verifier);
 
@@ -103,7 +105,8 @@ function createVerifier(env: Env) {
     const cacheKey = `local:${env.AUTH_JWKS_JSON}`;
     const cached = verifierCache.get(cacheKey);
 
-    if (cached) return cached;
+    if (cached) {return cached;}
+
     const verifier = createLocalJWKSet(jwksSchema.parse(JSON.parse(env.AUTH_JWKS_JSON)));
     verifierCache.set(cacheKey, verifier);
 

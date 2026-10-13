@@ -31,7 +31,7 @@ export function SetupDialog({
   });
 
   useEffect(() => {
-    if (open) form.reset(config);
+    if (open) {form.reset(config);}
   }, [config, form, open]);
 
   return (
@@ -66,7 +66,7 @@ export function SetupDialog({
               type="button"
               disabled={launchingDemo}
               onClick={async () => {
-                if (await onLaunchDemo()) onOpenChange(false);
+                if (await onLaunchDemo()) {onOpenChange(false);}
               }}
             >
               {launchingDemo ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />}

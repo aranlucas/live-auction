@@ -23,7 +23,7 @@ export const auctionParamsSchema = z.strictObject({
 export const idempotencyKeySchema = z
   .string()
   .trim()
-  .regex(/^[\x21-\x7E]{1,200}$/, "must contain 1-200 visible ASCII characters")
+  .regex(/^[\u0021-\u007E]{1,200}$/, "must contain 1-200 visible ASCII characters")
   .openapi({ example: "bid-018f4e9f" });
 
 export const authorizationHeaderSchema = z

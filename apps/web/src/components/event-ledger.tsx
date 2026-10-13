@@ -24,7 +24,7 @@ export function EventLedger({ events, connected }: { events: AuctionEvent[]; con
   const [paused, setPaused] = useState(false);
   const [visibleEvents, setVisibleEvents] = useState(events);
   useEffect(() => {
-    if (!paused) setVisibleEvents(events);
+    if (!paused) {setVisibleEvents(events);}
   }, [events, paused]);
   const rows = [...visibleEvents].reverse().slice(0, 8);
 
@@ -41,7 +41,8 @@ export function EventLedger({ events, connected }: { events: AuctionEvent[]; con
           className="secondary-button compact-button"
           type="button"
           onClick={() => {
-            if (paused) setVisibleEvents(events);
+            if (paused) {setVisibleEvents(events);}
+
             setPaused((value) => !value);
           }}
         >

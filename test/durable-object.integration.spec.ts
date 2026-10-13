@@ -111,7 +111,7 @@ describe("Durable Object integration behavior", () => {
 
     expect(conflict.ok).toBe(false);
 
-    if (!conflict.ok) expect(conflict.error.code).toBe("AUCTION_ALREADY_EXISTS");
+    if (!conflict.ok) {expect(conflict.error.code).toBe("AUCTION_ALREADY_EXISTS");}
 
     const other = readResultSchema.parse(
       await (await request("/v1/auctions/create-replay-integration-other")).json(),
@@ -119,7 +119,7 @@ describe("Durable Object integration behavior", () => {
 
     expect(other.ok).toBe(false);
 
-    if (!other.ok) expect(other.error.code).toBe("AUCTION_NOT_FOUND");
+    if (!other.ok) {expect(other.error.code).toBe("AUCTION_NOT_FOUND");}
   });
 
   it("persists state and ordered history across Durable Object eviction", async () => {
@@ -145,7 +145,7 @@ describe("Durable Object integration behavior", () => {
 
     expect(history.ok).toBe(true);
 
-    if (history.ok) expect(history.events.map((event) => event.sequence)).toEqual([1, 2, 3, 4]);
+    if (history.ok) {expect(history.events.map((event) => event.sequence)).toEqual([1, 2, 3, 4]);}
   });
 
   it("delivers snapshots, events, and ping/pong across WebSocket hibernation", async () => {
@@ -163,7 +163,7 @@ describe("Durable Object integration behavior", () => {
     const socket = response.webSocket;
     expect(socket).not.toBeNull();
 
-    if (!socket) return;
+    if (!socket) {return;}
 
     const snapshotMessage = nextSocketMessage(socket);
     socket.accept();
@@ -210,7 +210,7 @@ describe("Durable Object integration behavior", () => {
     const socket = response.webSocket;
     expect(socket).not.toBeNull();
 
-    if (!socket) return;
+    if (!socket) {return;}
 
     const initial = nextSocketMessage(socket);
     socket.accept();
@@ -229,7 +229,8 @@ describe("Durable Object integration behavior", () => {
     const event = realtimeMessageSchema.parse(JSON.parse(await next));
     expect(event.type).toBe("auction.event");
 
-    if (event.type === "auction.event") expect(event.cursor).toBe(4);
+    if (event.type === "auction.event") {expect(event.cursor).toBe(4);}
+
     socket.close(1000, "resume complete");
   });
 
@@ -277,7 +278,7 @@ describe("Durable Object integration behavior", () => {
 
     expect(late.ok).toBe(false);
 
-    if (!late.ok) expect(late.error.code).toBe("AUCTION_NOT_LIVE");
+    if (!late.ok) {expect(late.error.code).toBe("AUCTION_NOT_LIVE");}
   });
 
   it("rejects nested values in persisted event payloads", () => {
