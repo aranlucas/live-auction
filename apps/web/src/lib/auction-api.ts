@@ -208,7 +208,9 @@ export function bestReadToken(config: TestRoomConfig): string {
 }
 
 export function errorMessage(cause: unknown): string {
-  if (cause instanceof AuctionApiError) {return `${cause.code}: ${cause.message}`;}
+  if (cause instanceof AuctionApiError) {
+    return `${cause.code}: ${cause.message}`;
+  }
 
   return cause instanceof Error ? cause.message : "The request failed";
 }

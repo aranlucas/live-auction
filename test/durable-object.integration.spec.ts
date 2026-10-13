@@ -1,5 +1,6 @@
 import { exports } from "cloudflare:workers";
 import { evictDurableObject, runDurableObjectAlarm } from "cloudflare:test";
+import assert from "node:assert/strict";
 import { describe, expect, it } from "vitest";
 import {
   auctionActionResultSchema,
@@ -111,7 +112,8 @@ describe("Durable Object integration behavior", () => {
 
     expect(conflict.ok).toBe(false);
 
-    if (!conflict.ok) {expect(conflict.error.code).toBe("AUCTION_ALREADY_EXISTS");}
+    assert.equal(conflict.ok, false);
+    expect(conflict.error.code).toBe("AUCTION_ALREADY_EXISTS");
 
     const other = readResultSchema.parse(
       await (await request("/v1/auctions/create-replay-integration-other")).json(),
@@ -119,7 +121,8 @@ describe("Durable Object integration behavior", () => {
 
     expect(other.ok).toBe(false);
 
-    if (!other.ok) {expect(other.error.code).toBe("AUCTION_NOT_FOUND");}
+    assert.equal(other.ok, false);
+    expect(other.error.code).toBe("AUCTION_NOT_FOUND");
   });
 
   it("persists state and ordered history across Durable Object eviction", async () => {
@@ -133,11 +136,10 @@ describe("Durable Object integration behavior", () => {
     const state = readResultSchema.parse(await (await request(`/v1/auctions/${id}`)).json());
     expect(state.ok).toBe(true);
 
-    if (state.ok) {
-      expect(state.auction.currentPriceCents).toBe(1_100);
-      expect(state.auction.leaderId).toBe("bidder-b");
-      expect(state.auction.bidCount).toBe(2);
-    }
+    assert.equal(state.ok, true);
+    expect(state.auction.currentPriceCents).toBe(1_100);
+    expect(state.auction.leaderId).toBe("bidder-b");
+    expect(state.auction.bidCount).toBe(2);
 
     const history = historyResultSchema.parse(
       await (await request(`/v1/auctions/${id}/history`)).json(),
@@ -145,7 +147,8 @@ describe("Durable Object integration behavior", () => {
 
     expect(history.ok).toBe(true);
 
-    if (history.ok) {expect(history.events.map((event) => event.sequence)).toEqual([1, 2, 3, 4]);}
+    assert.equal(history.ok, true);
+    expect(history.events.map((event) => event.sequence)).toEqual([1, 2, 3, 4]);
   });
 
   it("delivers snapshots, events, and ping/pong across WebSocket hibernation", async () => {
@@ -163,7 +166,9 @@ describe("Durable Object integration behavior", () => {
     const socket = response.webSocket;
     expect(socket).not.toBeNull();
 
-    if (!socket) {return;}
+    if (!socket) {
+      return;
+    }
 
     const snapshotMessage = nextSocketMessage(socket);
     socket.accept();
@@ -174,6 +179,7 @@ describe("Durable Object integration behavior", () => {
     await evictDurableObject(exports.Auction.getByName(id));
 
     for (let shard = 0; shard < 4; shard += 1) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential eviction requires ordered awaits
       await evictDurableObject(exports.AuctionFanout.getByName(`${id}:${shard}`));
     }
 
@@ -186,10 +192,9 @@ describe("Durable Object integration behavior", () => {
     const event = realtimeMessageSchema.parse(JSON.parse(await eventMessage));
     expect(event.type).toBe("auction.event");
 
-    if (event.type === "auction.event") {
-      expect(event.event.type).toBe("bid.accepted");
-      expect(event.auction.leaderId).toBe("socket-bidder");
-    }
+    assert.equal(event.type, "auction.event");
+    expect(event.event.type).toBe("bid.accepted");
+    expect(event.auction.leaderId).toBe("socket-bidder");
 
     socket.close(1000, "test complete");
   });
@@ -210,26 +215,28 @@ describe("Durable Object integration behavior", () => {
     const socket = response.webSocket;
     expect(socket).not.toBeNull();
 
-    if (!socket) {return;}
+    if (!socket) {
+      return;
+    }
 
     const initial = nextSocketMessage(socket);
     socket.accept();
     const snapshot = realtimeMessageSchema.parse(JSON.parse(await initial));
     expect(snapshot.type).toBe("auction.snapshot");
 
-    if (snapshot.type === "auction.snapshot") {
-      expect(snapshot.resyncRequired).toBe(false);
-      expect(snapshot.events.map((event) => event.sequence)).toEqual([2, 3]);
-      expect(snapshot.cursor).toBe(3);
-      expect(snapshot.auction.version).toBe(3);
-    }
+    assert.equal(snapshot.type, "auction.snapshot");
+    expect(snapshot.resyncRequired).toBe(false);
+    expect(snapshot.events.map((event) => event.sequence)).toEqual([2, 3]);
+    expect(snapshot.cursor).toBe(3);
+    expect(snapshot.auction.version).toBe(3);
 
     const next = nextSocketMessage(socket);
     expect((await placeBid(id, "resume-bidder-2", 1_100, "resume-bid-2")).status).toBe(200);
     const event = realtimeMessageSchema.parse(JSON.parse(await next));
     expect(event.type).toBe("auction.event");
 
-    if (event.type === "auction.event") {expect(event.cursor).toBe(4);}
+    assert.equal(event.type, "auction.event");
+    expect(event.cursor).toBe(4);
 
     socket.close(1000, "resume complete");
   });
@@ -240,6 +247,7 @@ describe("Durable Object integration behavior", () => {
 
     for (let index = 0; index < 5; index += 1) {
       expect(
+        // oxlint-disable-next-line no-await-in-loop -- ordered integration steps require sequential awaits
         (await placeBid(id, `bidder-${index}`, 1_000 + index * 100, `page-bid-${index}`)).status,
       ).toBe(200);
     }
@@ -278,7 +286,8 @@ describe("Durable Object integration behavior", () => {
 
     expect(late.ok).toBe(false);
 
-    if (!late.ok) {expect(late.error.code).toBe("AUCTION_NOT_LIVE");}
+    assert.equal(late.ok, false);
+    expect(late.error.code).toBe("AUCTION_NOT_LIVE");
   });
 
   it("rejects nested values in persisted event payloads", () => {

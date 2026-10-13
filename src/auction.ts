@@ -74,6 +74,16 @@ interface AuctionActionOutcome {
   published?: AuctionActionSuccess;
 }
 
+type SchemaVersionResult = {
+  version: number;
+};
+
+interface CloseIdempotency {
+  actorId: string;
+  idempotencyKey: string;
+  actionType: "close";
+}
+
 const failure = (status: number, code: string, message: string): OperationFailure => ({
   ok: false,
   error: { status, code, message },
@@ -96,7 +106,7 @@ export class Auction extends DurableObject<Env> {
     `);
 
     const currentVersion = this.ctx.storage.sql
-      .exec<{ version: number }>(
+      .exec<SchemaVersionResult>(
         "SELECT COALESCE(MAX(id), 0) AS version FROM _sql_schema_migrations",
       )
       .one().version;
@@ -310,7 +320,9 @@ export class Auction extends DurableObject<Env> {
   async getAuction(): Promise<ReadResult> {
     const closed = await this.closeIfDue(Date.now());
 
-    if (closed) {this.publish(closed);}
+    if (closed) {
+      this.publish(closed);
+    }
 
     const row = this.readAuctionRow();
 
@@ -322,11 +334,15 @@ export class Auction extends DurableObject<Env> {
   async getHistory(afterSequence: number, limit: number): Promise<HistoryResult> {
     const closed = await this.closeIfDue(Date.now());
 
-    if (closed) {this.publish(closed);}
+    if (closed) {
+      this.publish(closed);
+    }
 
     const row = this.readAuctionRow();
 
-    if (!row) {return failure(404, "AUCTION_NOT_FOUND", "Auction not found");}
+    if (!row) {
+      return failure(404, "AUCTION_NOT_FOUND", "Auction not found");
+    }
 
     return {
       ok: true,
@@ -338,11 +354,15 @@ export class Auction extends DurableObject<Env> {
   async getRealtimeBootstrap(afterSequence?: number): Promise<RealtimeBootstrapResult> {
     const closed = await this.closeIfDue(Date.now());
 
-    if (closed) {this.publish(closed);}
+    if (closed) {
+      this.publish(closed);
+    }
 
     const row = this.readAuctionRow();
 
-    if (!row) {return failure(404, "AUCTION_NOT_FOUND", "Auction not found");}
+    if (!row) {
+      return failure(404, "AUCTION_NOT_FOUND", "Auction not found");
+    }
 
     const resyncRequired =
       afterSequence !== undefined &&
@@ -371,10 +391,11 @@ export class Auction extends DurableObject<Env> {
     const outcome = await this.ctx.storage.transaction(async (): Promise<AuctionActionOutcome> => {
       const row = this.readAuctionRow();
 
-      if (!row)
-        {return {
+      if (!row) {
+        return {
           result: failure(404, "AUCTION_NOT_FOUND", "Auction not found"),
-        };}
+        };
+      }
 
       if (row.seller_id !== sellerId) {
         return {
@@ -422,7 +443,9 @@ export class Auction extends DurableObject<Env> {
       return { result, published: result };
     });
 
-    if (outcome.published) {this.publish(outcome.published);}
+    if (outcome.published) {
+      this.publish(outcome.published);
+    }
 
     return outcome.result;
   }
@@ -438,10 +461,11 @@ export class Auction extends DurableObject<Env> {
     const outcome = await this.ctx.storage.transaction(async (): Promise<AuctionActionOutcome> => {
       const row = this.readAuctionRow();
 
-      if (!row)
-        {return {
+      if (!row) {
+        return {
           result: failure(404, "AUCTION_NOT_FOUND", "Auction not found"),
-        };}
+        };
+      }
 
       const replay = this.replayIdempotentRequest(bidderId, idempotencyKey, "bid", fingerprint);
 
@@ -528,12 +552,16 @@ export class Auction extends DurableObject<Env> {
 
       this.storeIdempotencyRecord(bidderId, idempotencyKey, "bid", fingerprint, result, now);
 
-      if (shouldExtend) {await this.ctx.storage.setAlarm(endsAt);}
+      if (shouldExtend) {
+        await this.ctx.storage.setAlarm(endsAt);
+      }
 
       return { result, published: result };
     });
 
-    if (outcome.published) {this.publish(outcome.published);}
+    if (outcome.published) {
+      this.publish(outcome.published);
+    }
 
     return outcome.result;
   }
@@ -544,10 +572,11 @@ export class Auction extends DurableObject<Env> {
     const outcome = await this.ctx.storage.transaction(async (): Promise<AuctionActionOutcome> => {
       const row = this.readAuctionRow();
 
-      if (!row)
-        {return {
+      if (!row) {
+        return {
           result: failure(404, "AUCTION_NOT_FOUND", "Auction not found"),
-        };}
+        };
+      }
 
       if (row.seller_id !== sellerId) {
         return {
@@ -557,7 +586,9 @@ export class Auction extends DurableObject<Env> {
 
       const replay = this.replayIdempotentRequest(sellerId, idempotencyKey, "close", "");
 
-      if (replay) {return { result: replay };}
+      if (replay) {
+        return { result: replay };
+      }
 
       if (row.state === "CLOSED") {
         return {
@@ -598,7 +629,9 @@ export class Auction extends DurableObject<Env> {
       return { result, published: result };
     });
 
-    if (outcome.published) {this.publish(outcome.published);}
+    if (outcome.published) {
+      this.publish(outcome.published);
+    }
 
     return outcome.result;
   }
@@ -609,10 +642,11 @@ export class Auction extends DurableObject<Env> {
     const outcome = await this.ctx.storage.transaction(async (): Promise<AuctionActionOutcome> => {
       const row = this.readAuctionRow();
 
-      if (!row)
-        {return {
+      if (!row) {
+        return {
           result: failure(404, "AUCTION_NOT_FOUND", "Auction not found"),
-        };}
+        };
+      }
 
       if (row.seller_id !== sellerId) {
         return {
@@ -622,7 +656,9 @@ export class Auction extends DurableObject<Env> {
 
       const replay = this.replayIdempotentRequest(sellerId, idempotencyKey, "cancel", "");
 
-      if (replay) {return { result: replay };}
+      if (replay) {
+        return { result: replay };
+      }
 
       if (row.state !== "DRAFT" && row.state !== "LIVE") {
         return {
@@ -652,7 +688,9 @@ export class Auction extends DurableObject<Env> {
       return { result, published: result };
     });
 
-    if (outcome.published) {this.publish(outcome.published);}
+    if (outcome.published) {
+      this.publish(outcome.published);
+    }
 
     return outcome.result;
   }
@@ -661,7 +699,9 @@ export class Auction extends DurableObject<Env> {
     const now = Date.now();
     const row = this.readAuctionRow();
 
-    if (!row || row.state !== "LIVE" || row.ends_at === null) {return;}
+    if (row?.state !== "LIVE" || row.ends_at === null) {
+      return;
+    }
 
     if (row.ends_at > now) {
       await this.ctx.storage.setAlarm(row.ends_at);
@@ -671,13 +711,17 @@ export class Auction extends DurableObject<Env> {
 
     const closed = await this.closeIfDue(now);
 
-    if (closed) {this.publish(closed);}
+    if (closed) {
+      this.publish(closed);
+    }
   }
 
   private async closeIfDue(now: number): Promise<AuctionActionSuccess | null> {
     const row = this.readAuctionRow();
 
-    if (!row || row.state !== "LIVE" || row.ends_at === null || row.ends_at > now) {return null;}
+    if (row?.state !== "LIVE" || row.ends_at === null || row.ends_at > now) {
+      return null;
+    }
 
     return this.ctx.storage.transaction(async () => {
       const closed = this.closeAtSync(now, "system", null);
@@ -690,15 +734,13 @@ export class Auction extends DurableObject<Env> {
   private closeAtSync(
     now: number,
     actorId: string,
-    idempotency: {
-      actorId: string;
-      idempotencyKey: string;
-      actionType: "close";
-    } | null,
+    idempotency: CloseIdempotency | null,
   ): AuctionActionSuccess | null {
     const row = this.readAuctionRow();
 
-    if (!row || row.state !== "LIVE") {return null;}
+    if (row?.state !== "LIVE") {
+      return null;
+    }
 
     const sequence = row.version + 1;
     this.ctx.storage.sql.exec(
@@ -750,7 +792,9 @@ export class Auction extends DurableObject<Env> {
       )
       .toArray()[0];
 
-    if (!raw) {return null;}
+    if (!raw) {
+      return null;
+    }
 
     const stored: IdempotencyRecord = idempotencyRecordSchema.parse(sqlRowSchema.parse(raw));
 
@@ -844,12 +888,14 @@ export class Auction extends DurableObject<Env> {
   }
 
   private toEvent(row: EventRow): AuctionEvent {
+    const payload: unknown = JSON.parse(row.payload_json);
+
     return auctionEventSchema.parse({
       sequence: row.sequence,
       type: row.type,
       actorId: row.actor_id,
       occurredAt: row.occurred_at,
-      payload: JSON.parse(row.payload_json),
+      payload,
     });
   }
 
@@ -864,7 +910,9 @@ export class Auction extends DurableObject<Env> {
   private requireAuctionRow(): AuctionRow {
     const row = this.readAuctionRow();
 
-    if (!row) {throw new Error("Auction row is missing");}
+    if (!row) {
+      throw new Error("Auction row is missing");
+    }
 
     return row;
   }
@@ -942,6 +990,8 @@ export class Auction extends DurableObject<Env> {
             }),
           );
         }
+
+        return undefined;
       }),
     );
   }

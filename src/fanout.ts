@@ -53,9 +53,13 @@ export class AuctionFanout extends DurableObject<Env> {
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = attachmentSchema.safeParse(socket.deserializeAttachment());
 
-      if (!attachment.success || !attachment.data.ready) {continue;}
+      if (!attachment.success || !attachment.data.ready) {
+        continue;
+      }
 
-      if (message.event.sequence <= attachment.data.cursor) {continue;}
+      if (message.event.sequence <= attachment.data.cursor) {
+        continue;
+      }
 
       try {
         socket.send(payload);
@@ -127,7 +131,9 @@ export class AuctionFanout extends DurableObject<Env> {
   }
 
   webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
-    if (message === "ping") {socket.send("pong");}
+    if (message === "ping") {
+      socket.send("pong");
+    }
   }
 
   webSocketClose(socket: WebSocket, code: number, reason: string): void {

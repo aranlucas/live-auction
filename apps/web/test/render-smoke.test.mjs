@@ -16,7 +16,10 @@ before(async () => {
   } else {
     const listener = createServer();
     await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
-    const port = listener.address().port;
+    const address = listener.address();
+    assert.ok(address instanceof Object && "port" in address);
+    const port = Number(address.port);
+    assert.ok(Number.isInteger(port) && port > 0);
     await new Promise((resolve) => listener.close(resolve));
     baseUrl = `http://127.0.0.1:${port}`;
     preview = spawn(
@@ -37,19 +40,24 @@ before(async () => {
 
   const deadline = Date.now() + 20000;
 
-  while (Date.now() < deadline) {
+  async function waitForPreview() {
     try {
       await fetch(baseUrl, { signal: AbortSignal.timeout(1000) });
-
-      return;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+      if (preview?.exitCode !== null && preview?.exitCode !== undefined) {
+        throw new Error(`Local preview did not start.\n${output}`);
+      }
 
-    if (preview?.exitCode !== null && preview?.exitCode !== undefined) {break;}
+      if (Date.now() >= deadline) {
+        throw new Error(`Local preview did not start.\n${output}`);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForPreview();
+    }
   }
 
-  throw new Error(`Local preview did not start.\n${output}`);
+  await waitForPreview();
 });
 
 after(() => {

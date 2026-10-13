@@ -1,5 +1,7 @@
 import handler from "@tanstack/react-start/server-entry";
 
-export default {
+const server = {
   fetch: handler.fetch,
 };
+
+export default server;

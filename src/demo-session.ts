@@ -106,7 +106,9 @@ async function issueToken(
       .setExpirationTime(expiresAt)
       .sign(signingKey);
   } catch (error) {
-    if (error instanceof DemoSessionConfigurationError) {throw error;}
+    if (error instanceof DemoSessionConfigurationError) {
+      throw error;
+    }
 
     throw new DemoSessionConfigurationError("Demo session signing is not configured correctly");
   }

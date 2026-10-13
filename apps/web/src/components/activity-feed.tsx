@@ -37,10 +37,18 @@ function eventCopy(event: AuctionEvent) {
           : "Closed without a winning bid",
       };
   }
+
+  const exhaustiveCheck: never = event;
+
+  return exhaustiveCheck;
 }
 
-export function ActivityFeed({ events }: { events: AuctionEvent[] }) {
-  const activity = [...events].reverse();
+interface ActivityFeedProps {
+  events: AuctionEvent[];
+}
+
+export function ActivityFeed({ events }: ActivityFeedProps) {
+  const activity = events.toReversed();
 
   return (
     <section className="activity-panel" aria-labelledby="activity-title">

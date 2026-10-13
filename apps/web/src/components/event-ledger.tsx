@@ -18,15 +18,26 @@ function eventDetail(event: AuctionEvent): string {
         ? `winner=${event.payload.winnerId} amount=${currency(event.payload.amountCents)}`
         : "winner=null";
   }
+
+  const exhaustiveCheck: never = event;
+
+  return exhaustiveCheck;
 }
 
-export function EventLedger({ events, connected }: { events: AuctionEvent[]; connected: boolean }) {
+interface EventLedgerProps {
+  events: AuctionEvent[];
+  connected: boolean;
+}
+
+export function EventLedger({ events, connected }: EventLedgerProps) {
   const [paused, setPaused] = useState(false);
   const [visibleEvents, setVisibleEvents] = useState(events);
   useEffect(() => {
-    if (!paused) {setVisibleEvents(events);}
+    if (!paused) {
+      setVisibleEvents(events);
+    }
   }, [events, paused]);
-  const rows = [...visibleEvents].reverse().slice(0, 8);
+  const rows = visibleEvents.toReversed().slice(0, 8);
 
   return (
     <section className="event-ledger" id="events" aria-labelledby="events-title">
@@ -41,7 +52,9 @@ export function EventLedger({ events, connected }: { events: AuctionEvent[]; con
           className="secondary-button compact-button"
           type="button"
           onClick={() => {
-            if (paused) {setVisibleEvents(events);}
+            if (paused) {
+              setVisibleEvents(events);
+            }
 
             setPaused((value) => !value);
           }}

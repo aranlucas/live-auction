@@ -872,7 +872,7 @@ paths:
           in: header
         - schema:
             type: string
-            pattern: ^[\x21-\x7E]{1,200}$
+            pattern: ^[\u0021-\u007E]{1,200}$
             example: bid-018f4e9f
           required: true
           name: idempotency-key
@@ -959,7 +959,7 @@ paths:
           in: header
         - schema:
             type: string
-            pattern: ^[\x21-\x7E]{1,200}$
+            pattern: ^[\u0021-\u007E]{1,200}$
             example: bid-018f4e9f
           required: true
           name: idempotency-key
@@ -1046,7 +1046,7 @@ paths:
           in: header
         - schema:
             type: string
-            pattern: ^[\x21-\x7E]{1,200}$
+            pattern: ^[\u0021-\u007E]{1,200}$
             example: bid-018f4e9f
           required: true
           name: idempotency-key
@@ -1133,7 +1133,7 @@ paths:
           in: header
         - schema:
             type: string
-            pattern: ^[\x21-\x7E]{1,200}$
+            pattern: ^[\u0021-\u007E]{1,200}$
             example: bid-018f4e9f
           required: true
           name: idempotency-key

@@ -12,10 +12,16 @@ const privateJwk = {
   alg: "ES256",
 };
 
+export interface TokenOverrides {
+  issuer?: string;
+  expiresAt?: number;
+  auctionId?: string;
+}
+
 export async function tokenFor(
   subject: string,
   role: "seller" | "bidder" | "viewer",
-  overrides?: { issuer?: string; expiresAt?: number; auctionId?: string },
+  overrides?: TokenOverrides,
 ): Promise<string> {
   const key = await importJWK(privateJwk, "ES256");
 
@@ -26,8 +32,11 @@ export async function tokenFor(
     .setAudience("live-auction-test")
     .setIssuedAt();
 
-  if (overrides?.expiresAt !== undefined) {token.setExpirationTime(overrides.expiresAt);}
-  else {token.setExpirationTime("15m");}
+  if (overrides?.expiresAt !== undefined) {
+    token.setExpirationTime(overrides.expiresAt);
+  } else {
+    token.setExpirationTime("15m");
+  }
 
   return token.sign(key);
 }
@@ -41,7 +50,9 @@ export async function actorHeaders(
     Authorization: `Bearer ${await tokenFor(subject, role)}`,
   };
 
-  if (idempotencyKey) {headers["Idempotency-Key"] = idempotencyKey;}
+  if (idempotencyKey) {
+    headers["Idempotency-Key"] = idempotencyKey;
+  }
 
   return headers;
 }

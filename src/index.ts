@@ -1,6 +1,7 @@
 import { exports } from "cloudflare:workers";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { zValidator } from "@hono/zod-validator";
+import type { Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { createMiddleware } from "hono/factory";
@@ -231,7 +232,7 @@ app.use("*", async (context, next) => {
 app.use(
   "/v1/*",
   cors({
-    origin: (origin, context) =>
+    origin: (origin: string, context: Context<AppEnvironment>) =>
       context.env.WEB_ORIGINS.split(",")
         .map((candidate: string) => candidate.trim())
         .includes(origin)
@@ -523,12 +524,16 @@ app.onError((error, context) => {
   return jsonFailure(500, "INTERNAL_ERROR", "Internal server error", requestId);
 });
 
-function formatValidationError(error: {
-  readonly issues: readonly {
-    readonly path: readonly PropertyKey[];
-    readonly message: string;
-  }[];
-}): string {
+interface ValidationIssue {
+  readonly path: readonly PropertyKey[];
+  readonly message: string;
+}
+
+interface ValidationErrorInput {
+  readonly issues: readonly ValidationIssue[];
+}
+
+function formatValidationError(error: ValidationErrorInput): string {
   return error.issues
     .map((issue) => `${issue.path.length > 0 ? issue.path.join(".") : "value"}: ${issue.message}`)
     .join("; ");
@@ -537,7 +542,9 @@ function formatValidationError(error: {
 function json<T>(value: T, status = 200, requestId?: string): Response {
   const headers = new Headers({ "Cache-Control": "no-store" });
 
-  if (requestId) {headers.set("X-Request-Id", requestId);}
+  if (requestId) {
+    headers.set("X-Request-Id", requestId);
+  }
 
   return Response.json(value, { status, headers });
 }

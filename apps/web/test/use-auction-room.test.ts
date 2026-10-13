@@ -99,7 +99,11 @@ let container: HTMLDivElement;
 
 let room: ReturnType<typeof useAuctionRoom>;
 
-function Probe({ config }: { config: TestRoomConfig }) {
+interface ProbeProps {
+  config: TestRoomConfig;
+}
+
+function Probe({ config }: ProbeProps) {
   room = useAuctionRoom(config);
 
   return createElement(
@@ -172,7 +176,7 @@ beforeEach(() => {
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
   container = document.createElement("div");
-  document.body.append(container);
+  document.body.appendChild(container);
   root = createRoot(container);
 });
 
