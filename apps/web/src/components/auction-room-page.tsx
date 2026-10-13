@@ -51,8 +51,8 @@ export function AuctionRoomPage({
 
   const [config, setConfig] = useState<TestRoomConfig>(() => ({
     ...defaultRoomConfig,
-    apiBaseUrl: routeApiBaseUrl || defaultRoomConfig.apiBaseUrl,
-    auctionId: routeAuctionId || defaultRoomConfig.auctionId,
+    apiBaseUrl: routeApiBaseUrl ?? defaultRoomConfig.apiBaseUrl,
+    auctionId: routeAuctionId ?? defaultRoomConfig.auctionId,
   }));
 
   const [setupOpen, setSetupOpen] = useState(false);
@@ -88,8 +88,8 @@ export function AuctionRoomPage({
   useEffect(() => {
     const routeConfig: TestRoomConfig = {
       ...defaultRoomConfig,
-      apiBaseUrl: routeApiBaseUrl || defaultRoomConfig.apiBaseUrl,
-      auctionId: routeAuctionId || defaultRoomConfig.auctionId,
+      apiBaseUrl: routeApiBaseUrl ?? defaultRoomConfig.apiBaseUrl,
+      auctionId: routeAuctionId ?? defaultRoomConfig.auctionId,
       sellerToken: autoJoin ? "" : defaultRoomConfig.sellerToken,
       bidderToken: autoJoin ? "" : defaultRoomConfig.bidderToken,
       viewerToken: autoJoin ? "" : defaultRoomConfig.viewerToken,
@@ -119,13 +119,15 @@ export function AuctionRoomPage({
       } else {
         const nextConfig = {
           ...parsed,
-          apiBaseUrl: routeApiBaseUrl || parsed.apiBaseUrl,
-          auctionId: routeAuctionId || parsed.auctionId,
+          apiBaseUrl: routeApiBaseUrl ?? parsed.apiBaseUrl,
+          auctionId: routeAuctionId ?? parsed.auctionId,
         };
 
         setConfig(nextConfig);
 
-        if (!routeAuctionId) navigateToAuction(nextConfig);
+        if (!routeAuctionId) {
+          navigateToAuction(nextConfig);
+        }
       }
     } catch {
       window.sessionStorage.removeItem(storageKey);
@@ -139,9 +141,13 @@ export function AuctionRoomPage({
 
   const mutation = useMutation({
     mutationFn: async (action: RoomAction) => {
-      if (action.type === "create") return createAuction(config);
+      if (action.type === "create") {
+        return createAuction(config);
+      }
 
-      if (action.type === "bid") return placeBid(config, action.amountCents);
+      if (action.type === "bid") {
+        return placeBid(config, action.amountCents);
+      }
 
       return command(config, action.action);
     },
@@ -207,7 +213,10 @@ export function AuctionRoomPage({
   };
 
   useEffect(() => {
-    if (!storageReady || !autoJoin || !routeAuctionId || autoJoinStarted.current) return;
+    if (!storageReady || !autoJoin || !routeAuctionId || autoJoinStarted.current) {
+      return;
+    }
+
     autoJoinStarted.current = true;
     joinMutation.mutate();
   }, [autoJoin, joinMutation, routeAuctionId, storageReady]);

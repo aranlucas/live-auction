@@ -2,7 +2,7 @@ type AuthHeaders = { "Content-Type": string; Authorization: string; "Idempotency
 
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve as resolvePath } from "node:path";
 import { performance } from "node:perf_hooks";
 import { z } from "zod";
 import {
@@ -23,6 +23,23 @@ interface CheckResult {
   detail: string;
 }
 
+interface IntegrationTimelineItem {
+  sequence: number;
+  type: string;
+  actorId: string;
+  occurredAt: number;
+  amountCents: number | null;
+}
+
+interface IntegrationReportSummary {
+  ok: true;
+  baseUrl: string;
+  runId: string;
+  auctionIds: typeof auctionIds;
+  checks: CheckResult[];
+  timeline: IntegrationTimelineItem[];
+}
+
 const cliArguments = process.argv.slice(2).filter((argument) => argument !== "--");
 
 const suppliedBaseUrl =
@@ -36,7 +53,7 @@ const reportArgument = cliArguments.find((argument) => argument.startsWith("--re
 
 const reportPath = cliArguments.includes("--no-report")
   ? undefined
-  : resolve(
+  : resolvePath(
       reportArgument?.slice("--report=".length) ??
         process.env.AUCTION_REPORT_PATH ??
         "artifacts/integration-report.html",
@@ -71,7 +88,9 @@ const sellerHeaders = async (key?: string): Promise<Record<string, string>> => {
     Authorization: `Bearer ${await issueToken("integration-seller", "seller", authOptions)}`,
   };
 
-  if (key) headers["Idempotency-Key"] = key;
+  if (key) {
+    headers["Idempotency-Key"] = key;
+  }
 
   return headers;
 };
@@ -166,9 +185,9 @@ async function bid(id: string, bidderId: string, key: string, amountCents: numbe
     parsed = JSON.parse(body);
   } catch {
     throw new Error(
-      `Bid returned non-JSON response: status=${response.status} content-type=${response.headers.get(
-        "Content-Type",
-      )} body=${body.slice(0, 300)}`,
+      `Bid returned non-JSON response: status=${response.status} content-type=${
+        response.headers.get("Content-Type") ?? "unknown"
+      } body=${body.slice(0, 300)}`,
     );
   }
 
@@ -182,15 +201,20 @@ function webSocketMessages(socket: WebSocket) {
     const message = String(event.data);
     const resolve = waiting.shift();
 
-    if (resolve) resolve(message);
-    else queued.push(message);
+    if (resolve) {
+      resolve(message);
+    } else {
+      queued.push(message);
+    }
   });
 
   return {
     next(timeoutMs = 5_000): Promise<string> {
       const queuedMessage = queued.shift();
 
-      if (queuedMessage !== undefined) return Promise.resolve(queuedMessage);
+      if (queuedMessage !== undefined) {
+        return Promise.resolve(queuedMessage);
+      }
 
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(
@@ -220,9 +244,14 @@ async function pollUntilClosed(id: string, timeoutMs = 12_000) {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
+    // oxlint-disable-next-line no-await-in-loop -- sequential polling requires ordered awaits
     const state = readResultSchema.parse(await (await api(`/v1/auctions/${id}`)).json());
 
-    if (state.ok && state.auction.state === "CLOSED") return state;
+    if (state.ok && state.auction.state === "CLOSED") {
+      return state;
+    }
+
+    // oxlint-disable-next-line no-await-in-loop -- sequential polling requires ordered awaits
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
@@ -238,21 +267,13 @@ function escapeHtml(value: string | number): string {
     .replaceAll("'", "&#039;");
 }
 
-async function writeIntegrationReport(summary: {
-  ok: true;
-  baseUrl: string;
-  runId: string;
-  auctionIds: typeof auctionIds;
-  checks: CheckResult[];
-  timeline: Array<{
-    sequence: number;
-    type: string;
-    actorId: string;
-    occurredAt: number;
-    amountCents: number | null;
-  }>;
-}): Promise<string | undefined> {
-  if (!reportPath) return undefined;
+async function writeIntegrationReport(
+  summary: IntegrationReportSummary,
+): Promise<string | undefined> {
+  if (!reportPath) {
+    return undefined;
+  }
+
   const maximumDuration = Math.max(...summary.checks.map((item) => item.durationMs), 1);
 
   const checkCards = summary.checks
@@ -308,7 +329,7 @@ async function main(): Promise<void> {
 
       return healthSchema.parse(await response.json());
     },
-    (health) => `${health.service} (${health.environment}), correlated request`,
+    (value) => `${value.service} (${value.environment}), correlated request`,
   );
 
   await check(
@@ -395,7 +416,9 @@ async function main(): Promise<void> {
       assert.notEqual(joinedBidders[0].bidderId, joinedBidders[1].bidderId);
 
       for (const [index, bidder] of joinedBidders.entries()) {
+        // oxlint-disable-next-line no-await-in-loop -- ordered integration steps require sequential awaits
         await parseResponse(
+          // oxlint-disable-next-line no-await-in-loop -- ordered integration steps require sequential awaits
           await api(`/v1/auctions/${session.auctionId}/bids`, {
             method: "POST",
             headers: {
@@ -516,12 +539,15 @@ async function main(): Promise<void> {
   assert.equal(accepted.length, 1);
   assert.equal(burst.filter(({ response }) => response.status === 409).length, 23);
   const acceptedAttempt = accepted[0];
-  assert(acceptedAttempt);
+  assert.ok(acceptedAttempt);
 
   const bidEvent = realtimeMessageSchema.parse(JSON.parse(await messages.next()));
   assert.equal(bidEvent.type, "auction.event");
 
-  if (bidEvent.type === "auction.event") assert.equal(bidEvent.event.type, "bid.accepted");
+  if (bidEvent.type === "auction.event") {
+    assert.equal(bidEvent.event.type, "bid.accepted");
+  }
+
   checks.push({
     name: "WebSocket bid fanout",
     durationMs: 0,
@@ -559,7 +585,9 @@ async function main(): Promise<void> {
       assert.equal(reused.response.status, 409);
       assert.equal(reused.result.ok, false);
 
-      if (!reused.result.ok) assert.equal(reused.result.error.code, "IDEMPOTENCY_KEY_REUSED");
+      if (!reused.result.ok) {
+        assert.equal(reused.result.error.code, "IDEMPOTENCY_KEY_REUSED");
+      }
 
       return reused.result;
     },
@@ -573,7 +601,9 @@ async function main(): Promise<void> {
       assert.equal(low.response.status, 409);
       assert.equal(low.result.ok, false);
 
-      if (!low.result.ok) assert.equal(low.result.error.code, "BID_TOO_LOW");
+      if (!low.result.ok) {
+        assert.equal(low.result.error.code, "BID_TOO_LOW");
+      }
 
       return low.result;
     },
@@ -596,7 +626,7 @@ async function main(): Promise<void> {
 
       return acceptedBid.result;
     },
-    (result) => `${result.auction.currentPriceCents} cents`,
+    (result) => `${result.auction.currentPriceCents ?? "unknown"} cents`,
   );
   const nextEvent = realtimeMessageSchema.parse(JSON.parse(await nextEventMessage));
   assert.equal(nextEvent.type, "auction.event");
@@ -624,7 +654,7 @@ async function main(): Promise<void> {
       return replay.result;
     },
     (result) =>
-      `original sequence ${result.event.sequence}, price ${result.auction.currentPriceCents}`,
+      `original sequence ${result.event.sequence}, price ${result.auction.currentPriceCents ?? "unknown"}`,
   );
 
   await check(
@@ -726,7 +756,7 @@ async function main(): Promise<void> {
   const closed = await check(
     "anti-sniping extension and alarm close",
     () => pollUntilClosed(auctionIds.alarm),
-    (result) => `${result.auction.state}, winner ${result.auction.winnerId}`,
+    (result) => `${result.auction.state}, winner ${result.auction.winnerId ?? "none"}`,
   );
 
   assert.equal(closed.ok && closed.auction.winnerId, "alarm-winner");

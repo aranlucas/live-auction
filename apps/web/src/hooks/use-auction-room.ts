@@ -88,8 +88,10 @@ export function useAuctionRoom(config: TestRoomConfig) {
 
       const payload = z.string().safeParse(message.data);
 
-      if (message.target !== socket || socket?.readyState !== ReadyState.OPEN || !payload.success)
+      if (message.target !== socket || socket?.readyState !== ReadyState.OPEN || !payload.success) {
         return;
+      }
+
       let value: unknown;
 
       try {
@@ -100,7 +102,10 @@ export function useAuctionRoom(config: TestRoomConfig) {
 
       const parsed = realtimeMessageSchema.safeParse(value);
 
-      if (!parsed.success || parsed.data.auction.id !== config.auctionId) return;
+      if (!parsed.success || parsed.data.auction.id !== config.auctionId) {
+        return;
+      }
+
       queryClient.setQueryData(
         queryKey,
         readResultSchema.parse({ ok: true, auction: parsed.data.auction }),

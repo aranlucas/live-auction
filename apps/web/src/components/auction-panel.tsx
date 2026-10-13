@@ -51,7 +51,12 @@ function useRemainingSeconds(endsAt: number | null | undefined): number {
   return remaining;
 }
 
-function CountdownRing({ seconds, total }: { seconds: number; total: number }) {
+interface CountdownRingProps {
+  seconds: number;
+  total: number;
+}
+
+function CountdownRing({ seconds, total }: CountdownRingProps) {
   const progress = total > 0 ? Math.min(1, seconds / total) : 0;
   const circumference = 2 * Math.PI * 48;
   const minutes = Math.floor(seconds / 60);
@@ -103,7 +108,9 @@ export function AuctionPanel({
     onSubmit: async ({ value }) => {
       const cents = Math.round(Number(value.amount) * 100);
 
-      if (Number.isFinite(cents) && cents >= nextMinimum) await onBid(cents);
+      if (Number.isFinite(cents) && cents >= nextMinimum) {
+        await onBid(cents);
+      }
     },
   });
 

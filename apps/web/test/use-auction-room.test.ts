@@ -99,7 +99,11 @@ let container: HTMLDivElement;
 
 let room: ReturnType<typeof useAuctionRoom>;
 
-function Probe({ config }: { config: TestRoomConfig }) {
+interface ProbeProps {
+  config: TestRoomConfig;
+}
+
+function Probe({ config }: ProbeProps) {
   room = useAuctionRoom(config);
 
   return createElement(

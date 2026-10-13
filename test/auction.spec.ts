@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { env, exports } from "cloudflare:workers";
 import { listDurableObjectIds, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
@@ -14,6 +15,14 @@ import {
   type ReadResult,
 } from "../src/model";
 import { actorHeaders, tokenFor } from "./auth";
+
+type SchemaVersionRow = {
+  id: number;
+};
+
+type IdempotencyResponseRow = {
+  response_json: string | null;
+};
 
 const sellerHeaders = async (key?: string): Promise<Record<string, string>> => ({
   "Content-Type": "application/json",
@@ -133,7 +142,9 @@ describe("live auction API", () => {
     const session = demoSessionResultSchema.parse(await sessionResponse.json());
     expect(session.ok).toBe(true);
 
-    if (!session.ok) return;
+    if (!session.ok) {
+      return;
+    }
 
     expect(session.expiresAt).toBeGreaterThan(Math.floor(Date.now() / 1_000) + 14 * 60);
 
@@ -164,7 +175,8 @@ describe("live auction API", () => {
     const draftJoin = demoBidderSessionResultSchema.parse(await draftJoinResponse.json());
     expect(draftJoin.ok).toBe(false);
 
-    if (!draftJoin.ok) expect(draftJoin.error.code).toBe("DEMO_AUCTION_NOT_LIVE");
+    assert.equal(draftJoin.ok, false);
+    expect(draftJoin.error.code).toBe("DEMO_AUCTION_NOT_LIVE");
 
     const start = await request(`/v1/auctions/${session.auctionId}/start`, {
       method: "POST",
@@ -190,7 +202,10 @@ describe("live auction API", () => {
     const secondBidder = demoBidderSessionResultSchema.parse(await secondBidderResponse.json());
     expect(firstBidder.ok && secondBidder.ok).toBe(true);
 
-    if (!firstBidder.ok || !secondBidder.ok) return;
+    if (!firstBidder.ok || !secondBidder.ok) {
+      return;
+    }
+
     expect(firstBidder.bidderId).not.toBe(secondBidder.bidderId);
 
     const firstBid = await request(`/v1/auctions/${session.auctionId}/bids`, {
@@ -240,7 +255,8 @@ describe("live auction API", () => {
     const result = demoBidderSessionResultSchema.parse(await response.json());
     expect(result.ok).toBe(false);
 
-    if (!result.ok) expect(result.error.code).toBe("DEMO_AUCTION_NOT_FOUND");
+    assert.equal(result.ok, false);
+    expect(result.error.code).toBe("DEMO_AUCTION_NOT_FOUND");
   });
 
   it("validates path, query, and body inputs at the Hono edge", async () => {
@@ -299,7 +315,10 @@ describe("live auction API", () => {
     const bid = await readActionResult(bidResponse);
     expect(bid.ok).toBe(true);
 
-    if (!bid.ok) return;
+    if (!bid.ok) {
+      return;
+    }
+
     expect(bid.auction.currentPriceCents).toBe(1_000);
     expect(bid.auction.nextMinimumBidCents).toBe(1_100);
     expect(bid.auction.leaderId).toBe("bidder-1");
@@ -325,12 +344,11 @@ describe("live auction API", () => {
 
     expect(replay.ok).toBe(true);
 
-    if (replay.ok) {
-      expect(replay.replayed).toBe(true);
-      expect(replay.event.sequence).toBe(bid.event.sequence);
-      expect(replay.auction.currentPriceCents).toBe(1_000);
-      expect(replay.auction.bidCount).toBe(1);
-    }
+    assert.equal(replay.ok, true);
+    expect(replay.replayed).toBe(true);
+    expect(replay.event.sequence).toBe(bid.event.sequence);
+    expect(replay.auction.currentPriceCents).toBe(1_000);
+    expect(replay.auction.bidCount).toBe(1);
 
     const current = await readAuction(await request(`/v1/auctions/${id}`));
     expect(current.ok && current.auction.currentPriceCents).toBe(1_100);
@@ -355,7 +373,8 @@ describe("live auction API", () => {
 
     expect(low.ok).toBe(false);
 
-    if (!low.ok) expect(low.error.code).toBe("BID_TOO_LOW");
+    assert.equal(low.ok, false);
+    expect(low.error.code).toBe("BID_TOO_LOW");
 
     await request(`/v1/auctions/${id}/bids`, {
       method: "POST",
@@ -373,7 +392,8 @@ describe("live auction API", () => {
 
     expect(reused.ok).toBe(false);
 
-    if (!reused.ok) expect(reused.error.code).toBe("IDEMPOTENCY_KEY_REUSED");
+    assert.equal(reused.ok, false);
+    expect(reused.error.code).toBe("IDEMPOTENCY_KEY_REUSED");
   });
 
   it("serializes contending bids so only one equal bid wins", async () => {
@@ -393,14 +413,15 @@ describe("live auction API", () => {
       }),
     ]);
 
-    expect([first.status, second.status].sort((left, right) => left - right)).toEqual([200, 409]);
+    expect([first.status, second.status].toSorted((left, right) => left - right)).toEqual([
+      200, 409,
+    ]);
     const state = await readAuction(await request(`/v1/auctions/${id}`));
     expect(state.ok).toBe(true);
 
-    if (state.ok) {
-      expect(state.auction.bidCount).toBe(1);
-      expect(["bidder-a", "bidder-b"]).toContain(state.auction.leaderId);
-    }
+    assert.equal(state.ok, true);
+    expect(state.auction.bidCount).toBe(1);
+    expect(["bidder-a", "bidder-b"]).toContain(state.auction.leaderId);
   });
 
   it("extends a deadline for a last-second bid", async () => {
@@ -413,7 +434,9 @@ describe("live auction API", () => {
     const before = await readAuction(await request(`/v1/auctions/${id}`));
     expect(before.ok).toBe(true);
 
-    if (!before.ok || before.auction.endsAt === null) return;
+    if (!before.ok || before.auction.endsAt === null) {
+      return;
+    }
 
     const accepted = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
@@ -425,12 +448,11 @@ describe("live auction API", () => {
 
     expect(accepted.ok).toBe(true);
 
-    if (accepted.ok) {
-      expect(accepted.auction.endsAt).toBe(before.auction.endsAt + 15_000);
-      await runInDurableObject(exports.Auction.getByName(id), async (_instance, state) => {
-        expect(await state.storage.getAlarm()).toBe(accepted.auction.endsAt);
-      });
-    }
+    assert.equal(accepted.ok, true);
+    expect(accepted.auction.endsAt).toBe(before.auction.endsAt + 15_000);
+    await runInDurableObject(exports.Auction.getByName(id), async (_instance, state) => {
+      expect(await state.storage.getAlarm()).toBe(accepted.auction.endsAt);
+    });
   });
 
   it("replays an accepted bid before lazily closing an overdue auction", async () => {
@@ -463,7 +485,9 @@ describe("live auction API", () => {
     const replay = await readActionResult(replayResponse);
     expect(replay.ok && replay.replayed).toBe(true);
 
-    if (replay.ok && original.ok) expect(replay.auction).toEqual(original.auction);
+    assert.equal(replay.ok, true);
+    assert.equal(original.ok, true);
+    expect(replay.auction).toEqual(original.auction);
 
     const newLateBid = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
@@ -475,8 +499,8 @@ describe("live auction API", () => {
 
     expect(newLateBid.ok).toBe(false);
 
-    if (!newLateBid.ok)
-      expect(["AUCTION_ENDED", "AUCTION_NOT_LIVE"]).toContain(newLateBid.error.code);
+    assert.equal(newLateBid.ok, false);
+    expect(["AUCTION_ENDED", "AUCTION_NOT_LIVE"]).toContain(newLateBid.error.code);
   });
 
   it("closes exactly once when the alarm runs and rejects late bids", async () => {
@@ -499,7 +523,10 @@ describe("live auction API", () => {
     const state = await readAuction(await request(`/v1/auctions/${id}`));
     expect(state.ok).toBe(true);
 
-    if (!state.ok) return;
+    if (!state.ok) {
+      return;
+    }
+
     expect(state.auction.state).toBe("CLOSED");
     expect(state.auction.winnerId).toBe("winner");
     const closedVersion = state.auction.version;
@@ -507,7 +534,8 @@ describe("live auction API", () => {
     expect(await runDurableObjectAlarm(stub)).toBe(false);
     const after = await readAuction(await request(`/v1/auctions/${id}`));
 
-    if (after.ok) expect(after.auction.version).toBe(closedVersion);
+    assert.equal(after.ok, true);
+    expect(after.auction.version).toBe(closedVersion);
 
     const late = await readActionResult(
       await request(`/v1/auctions/${id}/bids`, {
@@ -519,7 +547,8 @@ describe("live auction API", () => {
 
     expect(late.ok).toBe(false);
 
-    if (!late.ok) expect(late.error.code).toBe("AUCTION_NOT_LIVE");
+    assert.equal(late.ok, false);
+    expect(late.error.code).toBe("AUCTION_NOT_LIVE");
   });
 
   it("requires roles and prevents a seller from closing early", async () => {
@@ -562,7 +591,8 @@ describe("live auction API", () => {
 
     expect(earlyClose.ok).toBe(false);
 
-    if (!earlyClose.ok) expect(earlyClose.error.code).toBe("AUCTION_NOT_ENDED");
+    assert.equal(earlyClose.ok, false);
+    expect(earlyClose.error.code).toBe("AUCTION_NOT_ENDED");
   });
 
   it("rejects forged identity before allocating an auction object", async () => {
@@ -628,14 +658,14 @@ describe("live auction API", () => {
     await createAndStart(id);
     await runInDurableObject(exports.Auction.getByName(id), async (_instance, state) => {
       const versions = state.storage.sql
-        .exec<{ id: number }>("SELECT id FROM _sql_schema_migrations ORDER BY id")
+        .exec<SchemaVersionRow>("SELECT id FROM _sql_schema_migrations ORDER BY id")
         .toArray()
         .map((row) => row.id);
 
       expect(versions).toEqual([1, 2, 3, 4]);
 
       const idempotencyRecord = state.storage.sql
-        .exec<{ response_json: string | null }>(
+        .exec<IdempotencyResponseRow>(
           "SELECT response_json FROM idempotency_records WHERE action_type = 'start'",
         )
         .one();

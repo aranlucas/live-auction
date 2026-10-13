@@ -11,15 +11,17 @@ const privateJwkSchema = z
   })
   .passthrough();
 
+export interface IssueTokenOptions {
+  issuer: string;
+  audience: string;
+  privateJwkPath?: string;
+  expiresIn?: string;
+}
+
 export async function issueToken(
   subject: string,
   role: "seller" | "bidder" | "viewer",
-  options: {
-    issuer: string;
-    audience: string;
-    privateJwkPath?: string;
-    expiresIn?: string;
-  },
+  options: IssueTokenOptions,
 ): Promise<string> {
   const path = options.privateJwkPath ?? ".auction-auth-private.jwk";
   const jwk = privateJwkSchema.parse(JSON.parse(await readFile(path, "utf8")));
