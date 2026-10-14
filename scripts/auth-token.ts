@@ -34,10 +34,10 @@ const input = argumentsSchema.parse({
   privateJwkPath: values.get("private-jwk-path") ?? ".auction-auth-private.jwk",
 });
 
-console.log(
-  await issueToken(input.subject, input.role, {
+process.stdout.write(
+  (await issueToken(input.subject, input.role, {
     issuer: input.issuer,
     audience: input.audience,
     privateJwkPath: input.privateJwkPath,
-  }),
+  })) + "\n",
 );

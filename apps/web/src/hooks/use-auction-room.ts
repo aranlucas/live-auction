@@ -110,7 +110,7 @@ export function useAuctionRoom(config: TestRoomConfig) {
         queryKey,
         readResultSchema.parse({ ok: true, auction: parsed.data.auction }),
       );
-      void queryClient.invalidateQueries({ queryKey: historyKey });
+      queryClient.invalidateQueries({ queryKey: historyKey }).catch(globalThis.reportError);
     },
     protocols: readToken ? ["auction.v1", `auth.${readToken}`] : undefined,
     shouldReconnect: () => true,

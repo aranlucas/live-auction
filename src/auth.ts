@@ -80,11 +80,11 @@ function extractBearerToken(request: Request): string | null {
 }
 
 function createVerifier(env: Env) {
-  const jwksUrl = env.AUTH_JWKS_URL ?? "";
+  const jwksUrl = z.string().parse(env.AUTH_JWKS_URL ?? "");
 
   if (jwksUrl) {
     try {
-      const cacheKey = "remote:" + jwksUrl;
+      const cacheKey = `remote:${jwksUrl}`;
       const cached = verifierCache.get(cacheKey);
 
       if (cached) {

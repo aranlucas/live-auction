@@ -97,7 +97,7 @@ async function issueToken(
 
     const signingKey = cachedSigningKey;
 
-    return new SignJWT({ role, auctionId })
+    return await new SignJWT({ role, auctionId })
       .setProtectedHeader({ alg: "ES256", kid: jwk.kid })
       .setSubject(subject)
       .setIssuer(env.AUTH_ISSUER)

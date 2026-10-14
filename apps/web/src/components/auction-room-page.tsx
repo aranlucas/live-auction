@@ -83,7 +83,9 @@ function AuctionRoom({
   const [initial] = useState(() => {
     const route = { routeAuctionId, routeApiBaseUrl, autoJoin };
 
-    if (!storageReady) return restoreRoomConfig(route, null);
+    if (!storageReady) {
+      return restoreRoomConfig(route, null);
+    }
 
     try {
       return restoreRoomConfig(route, window.sessionStorage.getItem(storageKey));
@@ -99,7 +101,7 @@ function AuctionRoom({
 
   const navigateToAuction = useCallback(
     (nextConfig: TestRoomConfig) => {
-      void navigate({
+      navigate({
         to: "/auctions/$auctionId",
         params: { auctionId: nextConfig.auctionId },
         search: {
@@ -109,7 +111,7 @@ function AuctionRoom({
               : nextConfig.apiBaseUrl,
         },
         replace: true,
-      });
+      }).catch(globalThis.reportError);
     },
     [navigate],
   );
@@ -132,7 +134,7 @@ function AuctionRoom({
   const room = useAuctionRoom(config);
 
   const mutation = useMutation({
-    mutationFn: async (action: RoomAction) => {
+    mutationFn: (action: RoomAction) => {
       if (action.type === "create") {
         return createAuction(config);
       }

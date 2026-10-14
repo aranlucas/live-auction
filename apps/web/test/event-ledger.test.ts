@@ -20,8 +20,10 @@ it("freezes the current events when paused and catches up when resumed", async (
   const root = createRoot(container);
 
   const render = async (events: AuctionEvent[]) => {
-    await act(async () => {
+    await act(() => {
       root.render(createElement(EventLedger, { events, connected: true }));
+
+      return Promise.resolve();
     });
   };
 
@@ -29,18 +31,22 @@ it("freezes the current events when paused and catches up when resumed", async (
     await render([event(1)]);
     await render([event(1), event(2)]);
     expect(container.textContent).toContain("seller-2");
-    await act(async () => {
+    await act(() => {
       container.querySelector("button")?.click();
+
+      return Promise.resolve();
     });
     await render([event(1), event(2), event(3)]);
     expect(container.textContent).toContain("seller-2");
     expect(container.textContent).not.toContain("seller-3");
-    await act(async () => {
+    await act(() => {
       container.querySelector("button")?.click();
+
+      return Promise.resolve();
     });
     expect(container.textContent).toContain("seller-3");
   } finally {
-    await act(async () => root.unmount());
+    await act(() => Promise.resolve(root.unmount()));
     vi.unstubAllGlobals();
   }
 });

@@ -92,9 +92,7 @@ const failure = (status: number, code: string, message: string): OperationFailur
 export class Auction extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    void ctx.blockConcurrencyWhile(async () => {
-      this.migrate();
-    });
+    this.migrate();
   }
 
   private migrate(): void {
@@ -250,11 +248,11 @@ export class Auction extends DurableObject<Env> {
     }
   }
 
-  async createAuction(
+  createAuction(
     auctionId: string,
     sellerId: string,
     input: CreateAuctionInput,
-  ): Promise<AuctionActionResult> {
+  ): AuctionActionResult {
     const existing = this.readAuctionRow();
 
     if (existing) {
@@ -716,11 +714,11 @@ export class Auction extends DurableObject<Env> {
     }
   }
 
-  private async closeIfDue(now: number): Promise<AuctionActionSuccess | null> {
+  private closeIfDue(now: number): Promise<AuctionActionSuccess | null> {
     const row = this.readAuctionRow();
 
     if (row?.state !== "LIVE" || row.ends_at === null || row.ends_at > now) {
-      return null;
+      return Promise.resolve(null);
     }
 
     return this.ctx.storage.transaction(async () => {
@@ -976,7 +974,8 @@ export class Auction extends DurableObject<Env> {
     );
 
     this.ctx.waitUntil(
-      Promise.allSettled(deliveries).then((settled) => {
+      (async () => {
+        const settled = await Promise.allSettled(deliveries);
         const rejected = settled.filter((delivery) => delivery.status === "rejected");
 
         if (rejected.length > 0) {
@@ -990,9 +989,7 @@ export class Auction extends DurableObject<Env> {
             }),
           );
         }
-
-        return undefined;
-      }),
+      })(),
     );
   }
 }

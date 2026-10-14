@@ -24,7 +24,9 @@ export function restoreRoomConfig(route: RoomRoute, stored: string | null): Init
     restored: false,
   };
 
-  if (route.autoJoin || !stored) return fallback;
+  if (route.autoJoin || !stored) {
+    return fallback;
+  }
 
   try {
     const parsed = testRoomConfigSchema.safeParse(JSON.parse(stored));
