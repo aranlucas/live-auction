@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
-import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, test } from "vitest";
 
 let preview: ChildProcess | undefined;
 
@@ -18,7 +18,7 @@ function localBaseUrl(): string {
   return baseUrl;
 }
 
-before(async () => {
+beforeAll(async () => {
   if (baseUrl) {
     assert.equal(new URL(baseUrl).hostname, "127.0.0.1", "Smoke tests only use a local preview");
   } else {
@@ -81,7 +81,7 @@ before(async () => {
   await waitForPreview();
 });
 
-after(() => {
+afterAll(() => {
   preview?.kill("SIGTERM");
 });
 
@@ -90,20 +90,19 @@ const cases = [
   ["/auctions/render-fixture", "Connect to this auction"],
 ];
 
-await Promise.all(
-  cases.map(([path, heading]) =>
-    test(`compiled preview renders ${path} without credentials or auction requests`, async () => {
-      const response = await fetch(new URL(path, localBaseUrl()), {
-        signal: AbortSignal.timeout(10000),
-      });
+test.each(cases)(
+  "compiled preview renders %s without credentials or auction requests",
+  async (path, heading) => {
+    const response = await fetch(new URL(path, localBaseUrl()), {
+      signal: AbortSignal.timeout(10000),
+    });
 
-      const html = await response.text();
+    const html = await response.text();
 
-      assert.equal(response.status, 200, `SSR failed: ${html}\n${output}`);
-      assert.match(response.headers.get("content-type") ?? "", /text\/html/);
-      assert.match(html, /Gavel Live/);
-      assert.ok(html.includes(heading), `Missing signed-out heading: ${heading}`);
-      assert.match(html, /<script[^>]+type="module"/);
-    }),
-  ),
+    assert.equal(response.status, 200, `SSR failed: ${html}\n${output}`);
+    assert.match(response.headers.get("content-type") ?? "", /text\/html/);
+    assert.match(html, /Gavel Live/);
+    assert.ok(html.includes(heading), `Missing signed-out heading: ${heading}`);
+    assert.match(html, /<script[^>]+type="module"/);
+  },
 );
