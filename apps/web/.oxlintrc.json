@@ -32,7 +32,6 @@
         "react/only-export-components": [
           "error",
           {
-            "allowConstantExport": true,
             "allowExportNames": ["Route"]
           }
         ]

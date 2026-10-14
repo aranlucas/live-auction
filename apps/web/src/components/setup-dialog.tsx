@@ -68,11 +68,11 @@ export function SetupDialog({
               type="button"
               disabled={launchingDemo}
               onClick={() => {
-                void (async () => {
+                (async () => {
                   if (await onLaunchDemo()) {
                     onOpenChange(false);
                   }
-                })();
+                })().catch(globalThis.reportError);
               }}
             >
               {launchingDemo ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />}
@@ -90,7 +90,7 @@ export function SetupDialog({
               onSubmit={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                void form.handleSubmit();
+                form.handleSubmit().catch(globalThis.reportError);
               }}
             >
               <div className="form-section">

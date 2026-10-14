@@ -252,7 +252,9 @@ async function pollUntilClosed(id: string, timeoutMs = 12_000) {
     }
 
     // oxlint-disable-next-line no-await-in-loop -- sequential polling requires ordered awaits
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 250);
+    });
   }
 
   throw new Error(`Auction ${id} did not close before the integration timeout`);
@@ -659,7 +661,7 @@ async function main(): Promise<void> {
 
   await check(
     "WebSocket ping/pong",
-    async () => {
+    () => {
       const pong = messages.next();
       socket.send("ping");
 
@@ -794,12 +796,12 @@ async function main(): Promise<void> {
   };
 
   const report = await writeIntegrationReport(summary);
-  console.log(JSON.stringify({ ...summary, report }, null, 2));
+  process.stdout.write(JSON.stringify({ ...summary, report }, null, 2) + "\n");
 }
 
 main().catch((cause: unknown) => {
   activeSocket?.close(1011, "integration failed");
-  console.error(
+  process.stderr.write(
     JSON.stringify(
       {
         ok: false,
@@ -811,7 +813,7 @@ main().catch((cause: unknown) => {
       },
       null,
       2,
-    ),
+    ) + "\n",
   );
   process.exitCode = 1;
 });

@@ -33,10 +33,10 @@ await chmod(privatePath, 0o600);
 
 await writeFile(publicPath, JSON.stringify(jwks, null, 2) + "\n");
 
-console.log(
+process.stdout.write(
   JSON.stringify({
     privateKey: privatePath,
     publicJwks: publicPath,
     publicJwksValue: JSON.stringify(jwks),
-  }),
+  }) + "\n",
 );

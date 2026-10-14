@@ -1,5 +1,6 @@
-import { exports } from "cloudflare:workers";
-import { evictDurableObject, runDurableObjectAlarm } from "cloudflare:test";
+import { env, exports } from "cloudflare:workers";
+import { Auction } from "../src/auction";
+import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import assert from "node:assert/strict";
 import { describe, expect, it } from "vitest";
 import {
@@ -99,6 +100,40 @@ function nextSocketMessage(socket: WebSocket): Promise<string> {
 }
 
 describe("Durable Object integration behavior", () => {
+  it("initializes a cold object before concurrent creation RPCs", async () => {
+    const id = "cold-start-concurrent-creation";
+    const responses = await Promise.all(Array.from({ length: 4 }, () => createDraft(id)));
+
+    const results = await Promise.all(
+      responses.map(async (response) => auctionActionResultSchema.parse(await response.json())),
+    );
+
+    expect(responses.filter((response) => response.status === 201)).toHaveLength(1);
+    expect(responses.filter((response) => response.status === 200)).toHaveLength(3);
+    expect(results.every((result) => result.ok)).toBe(true);
+    expect(results.filter((result) => result.ok && !result.replayed)).toHaveLength(1);
+
+    const history = historyResultSchema.parse(
+      await (await request(`/v1/auctions/${id}/history`)).json(),
+    );
+
+    expect(history.ok && history.events.map((event) => event.sequence)).toEqual([1]);
+  });
+
+  it("rejects a constructor whose schema initialization fails", async () => {
+    const id = "failed-schema-initialization";
+    expect((await createDraft(id)).status).toBe(201);
+    await runInDurableObject(exports.Auction.getByName(id), (_instance, state) => {
+      state.storage.sql.exec("ALTER TABLE _sql_schema_migrations RENAME COLUMN id TO invalid_id");
+
+      try {
+        expect(() => new Auction(state, env)).toThrow("no such column: id");
+      } finally {
+        state.storage.sql.exec("ALTER TABLE _sql_schema_migrations RENAME COLUMN invalid_id TO id");
+      }
+    });
+  });
+
   it("replays identical creation, rejects conflicting creation, and isolates IDs", async () => {
     const id = "create-replay-integration";
     expect((await createDraft(id)).status).toBe(201);
@@ -178,10 +213,11 @@ describe("Durable Object integration behavior", () => {
 
     await evictDurableObject(exports.Auction.getByName(id));
 
-    for (let shard = 0; shard < 4; shard += 1) {
-      // oxlint-disable-next-line no-await-in-loop -- sequential eviction requires ordered awaits
-      await evictDurableObject(exports.AuctionFanout.getByName(`${id}:${shard}`));
-    }
+    await Promise.all(
+      Array.from({ length: 4 }, (_, shard) =>
+        evictDurableObject(exports.AuctionFanout.getByName(`${id}:${shard}`)),
+      ),
+    );
 
     const pong = nextSocketMessage(socket);
     socket.send("ping");

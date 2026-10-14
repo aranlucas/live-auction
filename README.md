@@ -89,3 +89,20 @@ Changes to `src/model.ts` can affect both the API and web client. Regenerate the
 contract with `pnpm openapi`, then run `pnpm check` before submitting a change. Never commit private
 signing keys, access tokens, `.dev.vars`, or other credentials. See [Security](SECURITY.md) for
 credential handling and vulnerability reports.
+
+### Lint policy integrations
+
+Oxlint and Oxfmt inherit the shared Oxforge policy. There are no local formatting style
+settings or broad rule/category disables. Three narrowly scoped lint integrations remain:
+
+- TanStack route modules must export `Route` alongside their view component, so only that
+  required export name is allowed by the Fast Refresh rule.
+- `test/env.d.ts` augments Cloudflare's `ProvidedEnv` through an interface that extends the
+  generated environment; that file permits single-extends interfaces for declaration merging.
+- `src/index.ts` and `src/auction.ts` retain `console.log`/`console.error` for structured
+  Cloudflare request/error telemetry. CLI commands write their output to stdout/stderr directly.
+
+Five documented `no-await-in-loop` directives remain in integration checks: polling must
+observe one result before waiting and trying again, and ascending auction bids must complete
+in order. Independent fanout-shard evictions run together. Generated routing/OpenAPI files
+remain excluded from hand-authored lint/format checks.

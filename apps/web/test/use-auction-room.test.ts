@@ -121,36 +121,64 @@ function Probe({ config }: ProbeProps) {
 
 async function flush() {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
   });
 }
 
 async function render(config = roomConfig) {
-  await act(async () => {
+  await act(() => {
     root.render(createElement(QueryClientProvider, { client }, createElement(Probe, { config })));
+
+    return Promise.resolve();
   });
   await flush();
 }
 
 async function complete(read: PendingRead, value: AuctionView) {
-  await act(async () => {
+  await act(() => {
     read.resolve(Response.json({ ok: true, auction: value }));
+
+    return Promise.resolve();
   });
   await flush();
 }
 
+function nextRead(): PendingRead {
+  const read = pending.shift();
+
+  if (!read) {
+    throw new Error("Expected a pending auction read");
+  }
+
+  return read;
+}
+
+function latestSocket(): ScriptedSocket {
+  const socket = ScriptedSocket.instances.at(-1);
+
+  if (!socket) {
+    throw new Error("Expected an auction socket");
+  }
+
+  return socket;
+}
+
 async function connect(version = 7) {
   await render();
-  await complete(pending.shift()!, auction(version));
-  await act(async () => {
-    ScriptedSocket.instances.at(-1)!.open();
+  await complete(nextRead(), auction(version));
+  await act(() => {
+    latestSocket().open();
+
+    return Promise.resolve();
   });
 
-  return ScriptedSocket.instances.at(-1)!;
+  return latestSocket();
 }
 
 async function snapshot(socket: ScriptedSocket, value: AuctionView) {
-  await act(async () => socket.snapshot(value));
+  await act(() => Promise.resolve(socket.snapshot(value)));
   await flush();
 }
 
@@ -182,12 +210,12 @@ beforeEach(() => {
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
   container = document.createElement("div");
-  document.body.appendChild(container);
+  document.body.insertAdjacentElement("beforeend", container);
   root = createRoot(container);
 });
 
 afterEach(async () => {
-  await act(async () => root.unmount());
+  await act(() => Promise.resolve(root.unmount()));
   client.clear();
   container.remove();
   vi.unstubAllGlobals();
@@ -198,7 +226,7 @@ describe("useAuctionRoom snapshot ordering", () => {
     const socket = await connect();
     const poll = room.auctionQuery.refetch();
     await snapshot(socket, auction(8));
-    await complete(pending.shift()!, auction(7));
+    await complete(nextRead(), auction(7));
     await poll;
     expect(visibleAuction()).toEqual(auction(8));
     expect(room.auctionQuery.isFetching).toBe(false);
@@ -215,7 +243,7 @@ describe("useAuctionRoom snapshot ordering", () => {
     const socket = await connect();
     const poll = room.auctionQuery.refetch();
     const cancelled: AuctionView = { ...auction(10), state: "CANCELLED" };
-    await complete(pending.shift()!, cancelled);
+    await complete(nextRead(), cancelled);
     await poll;
     await snapshot(socket, auction(9));
     expect(visibleAuction()).toEqual(cancelled);
@@ -230,7 +258,7 @@ describe("useAuctionRoom snapshot ordering", () => {
     await snapshot(oldSocket, auction(20));
     await render(config);
     expect(visibleAuction()).toBeNull();
-    await complete(pending.shift()!, auction(1, id));
+    await complete(nextRead(), auction(1, id));
     expect(visibleAuction()).toEqual(auction(1, id));
     await snapshot(oldSocket, auction(21));
     expect(visibleAuction()).toEqual(auction(1, id));
@@ -252,9 +280,11 @@ describe("useAuctionRoom snapshot ordering", () => {
 
   it("ignores malformed and heartbeat messages", async () => {
     const socket = await connect();
-    await act(async () => {
+    await act(() => {
       socket.receive("pong");
       socket.receive({ type: "auction.snapshot", auction: { version: 99 } });
+
+      return Promise.resolve();
     });
     await flush();
     expect(visibleAuction()).toEqual(auction(7));
@@ -269,15 +299,15 @@ describe("useAuctionRoom snapshot ordering", () => {
   it("preserves socket progress on cancellation and ignores the aborted HTTP reply", async () => {
     const socket = await connect();
     const poll = room.auctionQuery.refetch();
-    const cancelledRead = pending.shift()!;
+    const cancelledRead = nextRead();
     await snapshot(socket, auction(8));
-    await act(async () => client.cancelQueries({ queryKey: ["auction"] }));
+    await act(() => client.cancelQueries({ queryKey: ["auction"] }));
     expect(cancelledRead.signal?.aborted).toBe(true);
     await complete(cancelledRead, auction(99));
     await poll;
     expect(visibleAuction()).toEqual(auction(8));
     const nextPoll = room.auctionQuery.refetch();
-    await complete(pending.shift()!, auction(9));
+    await complete(nextRead(), auction(9));
     await nextPoll;
     expect(visibleAuction()).toEqual(auction(9));
   });
@@ -285,10 +315,10 @@ describe("useAuctionRoom snapshot ordering", () => {
   it("aborts reads on room changes without writing the late result into the new room", async () => {
     await connect();
     const poll = room.auctionQuery.refetch();
-    const oldRead = pending.shift()!;
+    const oldRead = nextRead();
     await render({ ...roomConfig, auctionId: "watch" });
     expect(oldRead.signal?.aborted).toBe(true);
-    await complete(pending.shift()!, auction(1, "watch"));
+    await complete(nextRead(), auction(1, "watch"));
     await complete(oldRead, auction(99));
     await poll;
     expect(visibleAuction()).toEqual(auction(1, "watch"));
@@ -299,7 +329,7 @@ describe("useAuctionRoom snapshot ordering", () => {
     const poll = room.auctionQuery.refetch();
     await snapshot(socket, auction(8));
     await act(async () => {
-      pending.shift()!.resolve(
+      nextRead().resolve(
         Response.json({
           ok: false,
           error: { status: 503, code: "UNAVAILABLE", message: "Retry" },
@@ -311,7 +341,7 @@ describe("useAuctionRoom snapshot ordering", () => {
     expect(visibleAuction()).toEqual(auction(8));
     expect(room.auctionQuery.isError).toBe(true);
     const nextPoll = room.auctionQuery.refetch();
-    await complete(pending.shift()!, auction(9));
+    await complete(nextRead(), auction(9));
     await nextPoll;
     expect(visibleAuction()).toEqual(auction(9));
   });

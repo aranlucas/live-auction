@@ -269,7 +269,7 @@ export function AuctionPanel({
         className="custom-bid"
         onSubmit={(event) => {
           event.preventDefault();
-          void form.handleSubmit();
+          form.handleSubmit().catch(globalThis.reportError);
         }}
       >
         <form.Field name="amount">

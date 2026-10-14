@@ -24,18 +24,16 @@ const storedMessageRowSchema = z.strictObject({
 export class AuctionFanout extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    void ctx.blockConcurrencyWhile(async () => {
-      this.ctx.storage.sql.exec(`
+    this.ctx.storage.sql.exec(`
         CREATE TABLE IF NOT EXISTS messages (
           sequence INTEGER PRIMARY KEY,
           message_json TEXT NOT NULL,
           created_at INTEGER NOT NULL
         )
-      `);
-    });
+    `);
   }
 
-  async publish(value: RealtimeEventMessage): Promise<void> {
+  publish(value: RealtimeEventMessage): void {
     const message = realtimeEventMessageSchema.parse(value);
     this.ctx.storage.sql.exec(
       "INSERT OR IGNORE INTO messages (sequence, message_json, created_at) VALUES (?, ?, ?)",

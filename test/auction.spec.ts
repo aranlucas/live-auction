@@ -656,7 +656,7 @@ describe("live auction API", () => {
   it("applies numbered migrations and database invariants", async () => {
     const id = "schema-invariants";
     await createAndStart(id);
-    await runInDurableObject(exports.Auction.getByName(id), async (_instance, state) => {
+    await runInDurableObject(exports.Auction.getByName(id), (_instance, state) => {
       const versions = state.storage.sql
         .exec<SchemaVersionRow>("SELECT id FROM _sql_schema_migrations ORDER BY id")
         .toArray()
