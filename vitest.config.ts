@@ -2,7 +2,8 @@ import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  test: { include: ["test/**/*.spec.ts"] },
+  resolve: { tsconfigPaths: true },
+  test: { include: ["test/**/*.test.ts"], exclude: ["test/production/**"] },
   plugins: [
     cloudflareTest({
       experimental: { newConfig: { configPath: "./cloudflare.config.ts" } },

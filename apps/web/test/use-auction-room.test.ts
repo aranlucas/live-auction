@@ -3,8 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { auctionViewSchema, type AuctionView } from "cloudflare-live-auction/model";
-import { useAuctionRoom } from "../src/hooks/use-auction-room";
-import { type TestRoomConfig } from "../src/lib/auction-api";
+import { useAuctionRoom } from "@/hooks/use-auction-room";
+import { type TestRoomConfig } from "@/lib/auction-api";
 
 const roomConfig: TestRoomConfig = {
   apiBaseUrl: "https://auction.test",

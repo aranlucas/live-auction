@@ -44,7 +44,7 @@ beforeAll(async () => {
       "pnpm",
       ["exec", "vite", "preview", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
       {
-        cwd: fileURLToPath(new URL("../", import.meta.url)),
+        cwd: fileURLToPath(new URL("../../", import.meta.url)),
         stdio: ["ignore", "pipe", "pipe"],
       },
     );

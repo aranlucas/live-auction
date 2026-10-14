@@ -3,7 +3,7 @@ import { env, exports } from "cloudflare:workers";
 import { listDurableObjectIds, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { Auction } from "../src/auction";
+import { Auction } from "@/auction";
 import {
   auctionActionResultSchema,
   demoBidderSessionResultSchema,
@@ -13,8 +13,8 @@ import {
   readResultSchema,
   type AuctionActionResult,
   type ReadResult,
-} from "../src/model";
-import { actorHeaders, tokenFor } from "./auth";
+} from "@/model";
+import { actorHeaders, tokenFor } from "@test/helpers/auth";
 
 type SchemaVersionRow = {
   id: number;

@@ -7,7 +7,11 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,
-    "types": ["./.cloudflare/types/index.d.ts"]
+    "types": ["./.cloudflare/types/index.d.ts"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@test/*": ["./test/*"]
+    }
   },
   "include": ["src/**/*.ts", ".cloudflare/types/index.d.ts"]
 }

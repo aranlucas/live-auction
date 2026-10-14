@@ -1,4 +1,4 @@
-import type { Auction } from "../src/auction";
+import type { Auction } from "@/auction";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv extends Env {}
