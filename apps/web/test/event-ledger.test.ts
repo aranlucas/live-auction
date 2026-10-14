@@ -2,7 +2,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import type { AuctionEvent } from "cloudflare-live-auction/model";
-import { EventLedger } from "../src/components/event-ledger";
+import { EventLedger } from "@/components/event-ledger";
 
 function event(sequence: number): AuctionEvent {
   return {

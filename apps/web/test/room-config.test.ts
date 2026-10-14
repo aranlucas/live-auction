@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { defaultRoomConfig } from "../src/lib/auction-api";
-import { restoreRoomConfig } from "../src/lib/room-config";
+import { defaultRoomConfig } from "@/lib/auction-api";
+import { restoreRoomConfig } from "@/lib/room-config";
 
 const stored = JSON.stringify({
   ...defaultRoomConfig,

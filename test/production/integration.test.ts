@@ -14,8 +14,8 @@ import {
   operationFailureSchema,
   readResultSchema,
   realtimeMessageSchema,
-} from "../src/model";
-import { issueToken } from "./auth-support";
+} from "@/model";
+import { issueToken } from "../../scripts/auth-support";
 
 interface CheckResult {
   name: string;

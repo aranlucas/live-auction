@@ -1,5 +1,5 @@
 import { env, exports } from "cloudflare:workers";
-import { Auction } from "../src/auction";
+import { Auction } from "@/auction";
 import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import assert from "node:assert/strict";
 import { describe, expect, it } from "vitest";
@@ -9,8 +9,8 @@ import {
   historyResultSchema,
   readResultSchema,
   realtimeMessageSchema,
-} from "../src/model";
-import { actorHeaders, websocketProtocols } from "./auth";
+} from "@/model";
+import { actorHeaders, websocketProtocols } from "@test/helpers/auth";
 
 const sellerHeaders = async (): Promise<Record<string, string>> => ({
   "Content-Type": "application/json",

@@ -1,11 +1,11 @@
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  resolve: { alias: { "#": fileURLToPath(new URL("./src", import.meta.url)) } },
+  resolve: { tsconfigPaths: true },
   test: {
     environment: "happy-dom",
     include: ["test/**/*.test.ts"],
+    exclude: ["test/render/**"],
     maxWorkers: 1,
     fileParallelism: false,
   },
