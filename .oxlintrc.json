@@ -53,7 +53,22 @@
     ".opencode/**",
     ".pi/**",
     ".roo/**",
-    ".windsurf/**"
+    ".windsurf/**",
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/.expo/**",
+    "**/.vercel/**",
+    "**/.agent/**",
+    "**/.agents/**",
+    "**/.claude/**",
+    "**/.codex/**",
+    "**/.continue/**",
+    "**/.cursor/**",
+    "**/.gemini/**",
+    "**/.opencode/**",
+    "**/.pi/**",
+    "**/.roo/**",
+    "**/.windsurf/**"
   ],
   "overrides": [
     {
@@ -73,5 +88,8 @@
         "typescript/consistent-type-imports": "off"
       }
     }
-  ]
+  ],
+  "options": {
+    "typeAware": true
+  }
 }

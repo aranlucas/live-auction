@@ -160,7 +160,11 @@ export function SetupDialog({
 
               <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
                 {([canSubmit, isSubmitting]) => (
-                  <button className="primary-button dialog-submit" disabled={!canSubmit}>
+                  <button
+                    type="submit"
+                    className="primary-button dialog-submit"
+                    disabled={!canSubmit}
+                  >
                     {isSubmitting ? "Saving…" : "Connect room"}
                   </button>
                 )}

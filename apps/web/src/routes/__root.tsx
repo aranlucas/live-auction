@@ -48,7 +48,7 @@ interface RootDocumentProps {
   children: React.ReactNode;
 }
 
-function RootDocument({ children }: RootDocumentProps) {
+export function RootDocument({ children }: RootDocumentProps) {
   return (
     <html lang="en">
       <head>

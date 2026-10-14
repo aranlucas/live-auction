@@ -9,7 +9,7 @@ export const Route = createFileRoute("/")({
   component: HomeRoute,
 });
 
-function HomeRoute() {
+export function HomeRoute() {
   const search = Route.useSearch();
 
   return <AuctionRoomPage routeApiBaseUrl={search.api} />;

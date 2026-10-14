@@ -77,7 +77,7 @@ export function useAuctionRoom(config: TestRoomConfig) {
   // The socket library keys connections by URL, not protocols. A URL function also
   // changes identity when credentials change, including when the next query is cached.
   const socketEndpoint = useMemo(
-    () => (socketUrl ? () => socketUrl : null),
+    () => (readToken && socketUrl ? () => socketUrl : null),
     [socketUrl, readToken],
   );
 

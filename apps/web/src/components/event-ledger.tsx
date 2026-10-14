@@ -1,5 +1,5 @@
 import { Pause, Play, Radio } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { AuctionEvent } from "cloudflare-live-auction/model";
 import { compactTime, currency } from "#/lib/format";
 
@@ -31,13 +31,8 @@ interface EventLedgerProps {
 
 export function EventLedger({ events, connected }: EventLedgerProps) {
   const [paused, setPaused] = useState(false);
-  const [visibleEvents, setVisibleEvents] = useState(events);
-  useEffect(() => {
-    if (!paused) {
-      setVisibleEvents(events);
-    }
-  }, [events, paused]);
-  const rows = visibleEvents.toReversed().slice(0, 8);
+  const [pausedEvents, setPausedEvents] = useState(events);
+  const rows = (paused ? pausedEvents : events).toReversed().slice(0, 8);
 
   return (
     <section className="event-ledger" id="events" aria-labelledby="events-title">
@@ -52,8 +47,8 @@ export function EventLedger({ events, connected }: EventLedgerProps) {
           className="secondary-button compact-button"
           type="button"
           onClick={() => {
-            if (paused) {
-              setVisibleEvents(events);
+            if (!paused) {
+              setPausedEvents(events);
             }
 
             setPaused((value) => !value);
