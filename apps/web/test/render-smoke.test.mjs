@@ -18,10 +18,10 @@ before(async () => {
     await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
     const address = listener.address();
     assert.ok(address instanceof Object && "port" in address);
-    const port = Number(address.port);
+    const port = address.port;
     assert.ok(Number.isInteger(port) && port > 0);
     await new Promise((resolve) => listener.close(resolve));
-    baseUrl = `http://127.0.0.1:${port}`;
+    baseUrl = `http://127.0.0.1:${String(port)}`;
     preview = spawn(
       "pnpm",
       ["exec", "vite", "preview", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
@@ -68,7 +68,7 @@ for (const [path, heading] of [
   ["/", "Start a live demo"],
   ["/auctions/render-fixture", "Connect to this auction"],
 ]) {
-  test(`compiled preview renders ${path} without credentials or auction requests`, async () => {
+  void test(`compiled preview renders ${path} without credentials or auction requests`, async () => {
     const response = await fetch(new URL(path, baseUrl), { signal: AbortSignal.timeout(10000) });
     const html = await response.text();
     assert.equal(response.status, 200, `SSR failed: ${html}\n${output}`);

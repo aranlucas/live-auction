@@ -10,7 +10,7 @@ export const Route = createFileRoute("/auctions/$auctionId_/join")({
   component: JoinAuctionRoute,
 });
 
-function JoinAuctionRoute() {
+export function JoinAuctionRoute() {
   const { auctionId } = Route.useParams();
   const search = Route.useSearch();
 

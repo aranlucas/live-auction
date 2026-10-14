@@ -26,7 +26,7 @@ export function LiveStage({ auction }: LiveStageProps) {
       <div className="host-lockup">
         <div className="host-avatar">MC</div>
         <div>
-          <strong>Maya's Camera Club</strong>
+          <strong>Maya&apos;s Camera Club</strong>
           <span>Host · Maya Chen</span>
         </div>
       </div>

@@ -22,6 +22,21 @@
     "**/.opencode/**",
     "**/.pi/**",
     "**/.roo/**",
-    "**/.windsurf/**"
+    "**/.windsurf/**",
+    "src/routeTree.gen.ts"
+  ],
+  "overrides": [
+    {
+      "files": ["src/routes/**/*.tsx"],
+      "rules": {
+        "react/only-export-components": [
+          "error",
+          {
+            "allowConstantExport": true,
+            "allowExportNames": ["Route"]
+          }
+        ]
+      }
+    }
   ]
 }

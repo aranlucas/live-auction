@@ -1,4 +1,4 @@
-import { act, createElement } from "react";
+import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -104,12 +104,18 @@ interface ProbeProps {
 }
 
 function Probe({ config }: ProbeProps) {
-  room = useAuctionRoom(config);
+  const currentRoom = useAuctionRoom(config);
+  useEffect(() => {
+    room = currentRoom;
+  }, [currentRoom]);
 
   return createElement(
     "output",
-    { "data-fetching": room.auctionQuery.isFetching, "data-error": room.auctionQuery.isError },
-    JSON.stringify(room.auction),
+    {
+      "data-fetching": currentRoom.auctionQuery.isFetching,
+      "data-error": currentRoom.auctionQuery.isError,
+    },
+    JSON.stringify(currentRoom.auction),
   );
 }
 

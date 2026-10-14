@@ -10,7 +10,7 @@ export const Route = createFileRoute("/auctions/$auctionId")({
   component: AuctionRoute,
 });
 
-function AuctionRoute() {
+export function AuctionRoute() {
   const { auctionId } = Route.useParams();
   const search = Route.useSearch();
 

@@ -1,4 +1,12 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, RefreshCw } from "lucide-react";
@@ -17,9 +25,9 @@ import {
   placeBid,
   requestDemoBidderSession,
   requestDemoSession,
-  testRoomConfigSchema,
   type TestRoomConfig,
 } from "#/lib/auction-api";
+import { restoreRoomConfig } from "#/lib/room-config";
 import { tokenSubject } from "#/lib/format";
 
 interface AuctionRoomPageProps {
@@ -41,22 +49,52 @@ const SetupDialog = lazy(() =>
   })),
 );
 
-export function AuctionRoomPage({
+const subscribeToHydration = () => () => {};
+
+const clientReady = () => true;
+
+const serverReady = () => false;
+
+export function AuctionRoomPage(props: AuctionRoomPageProps) {
+  const storageReady = useSyncExternalStore(subscribeToHydration, clientReady, serverReady);
+
+  return (
+    <AuctionRoom
+      key={`${String(props.autoJoin ?? false)}:${props.routeAuctionId ?? ""}:${props.routeApiBaseUrl ?? ""}:${String(storageReady)}`}
+      {...props}
+      storageReady={storageReady}
+    />
+  );
+}
+
+interface AuctionRoomProps extends AuctionRoomPageProps {
+  storageReady: boolean;
+}
+
+function AuctionRoom({
   routeAuctionId,
   routeApiBaseUrl,
   autoJoin = false,
-}: AuctionRoomPageProps) {
+  storageReady,
+}: AuctionRoomProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [config, setConfig] = useState<TestRoomConfig>(() => ({
-    ...defaultRoomConfig,
-    apiBaseUrl: routeApiBaseUrl ?? defaultRoomConfig.apiBaseUrl,
-    auctionId: routeAuctionId ?? defaultRoomConfig.auctionId,
-  }));
+  const [initial] = useState(() => {
+    const route = { routeAuctionId, routeApiBaseUrl, autoJoin };
+
+    if (!storageReady) return restoreRoomConfig(route, null);
+
+    try {
+      return restoreRoomConfig(route, window.sessionStorage.getItem(storageKey));
+    } catch {
+      return restoreRoomConfig(route, null);
+    }
+  });
+
+  const [config, setConfig] = useState(initial.value);
 
   const [setupOpen, setSetupOpen] = useState(false);
-  const [storageReady, setStorageReady] = useState(false);
   const autoJoinStarted = useRef(false);
 
   const navigateToAuction = useCallback(
@@ -86,56 +124,10 @@ export function AuctionRoomPage({
   );
 
   useEffect(() => {
-    const routeConfig: TestRoomConfig = {
-      ...defaultRoomConfig,
-      apiBaseUrl: routeApiBaseUrl ?? defaultRoomConfig.apiBaseUrl,
-      auctionId: routeAuctionId ?? defaultRoomConfig.auctionId,
-      sellerToken: autoJoin ? "" : defaultRoomConfig.sellerToken,
-      bidderToken: autoJoin ? "" : defaultRoomConfig.bidderToken,
-      viewerToken: autoJoin ? "" : defaultRoomConfig.viewerToken,
-    };
-
-    if (autoJoin) {
-      setConfig(routeConfig);
-      setStorageReady(true);
-
-      return;
+    if (storageReady && initial.restored && !autoJoin && !routeAuctionId && config.auctionId) {
+      navigateToAuction(config);
     }
-
-    const stored = window.sessionStorage.getItem(storageKey);
-
-    if (!stored) {
-      setConfig(routeConfig);
-      setStorageReady(true);
-
-      return;
-    }
-
-    try {
-      const parsed = testRoomConfigSchema.parse(JSON.parse(stored));
-
-      if (routeAuctionId && parsed.auctionId !== routeAuctionId) {
-        setConfig(routeConfig);
-      } else {
-        const nextConfig = {
-          ...parsed,
-          apiBaseUrl: routeApiBaseUrl ?? parsed.apiBaseUrl,
-          auctionId: routeAuctionId ?? parsed.auctionId,
-        };
-
-        setConfig(nextConfig);
-
-        if (!routeAuctionId) {
-          navigateToAuction(nextConfig);
-        }
-      }
-    } catch {
-      window.sessionStorage.removeItem(storageKey);
-      setConfig(routeConfig);
-    }
-
-    setStorageReady(true);
-  }, [autoJoin, navigateToAuction, routeApiBaseUrl, routeAuctionId]);
+  }, [autoJoin, config, initial.restored, navigateToAuction, routeAuctionId, storageReady]);
 
   const room = useAuctionRoom(config);
 

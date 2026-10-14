@@ -57,6 +57,7 @@ export default defineConfig((ctx) => {
       };
     }
 
+    case undefined:
     default: {
       return {
         worker: {
