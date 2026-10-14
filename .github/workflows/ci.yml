@@ -39,7 +39,7 @@ jobs:
         run: pnpm test
 
       - name: Build web, render tests, and dry run
-        run: pnpm --filter gavel-live-web build && pnpm --filter gavel-live-web test:render && pnpm --filter gavel-live-web deploy:dry-run
+        run: pnpm --filter gavel-live-web build && pnpm --filter gavel-live-web test:render && pnpm --filter gavel-live-web exec cf deploy --prebuilt --dry-run --mode production
 
       - name: Worker deploy dry run
         run: pnpm deploy:dry-run
