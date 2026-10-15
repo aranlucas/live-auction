@@ -12,7 +12,7 @@ minimumReleaseAgeExclude:
   - cf@1.0.0-beta.10 || 1.0.0-beta.14
   - wrangler@4.143.0 || 4.149.0
   - "@cloudflare/vite-plugin@2.0.0-beta.sha-ad79608dd"
-  - "@cloudflare/vitest-plugin@1.4.0"
+  - "@cloudflare/vitest-plugin@1.4.0 || 1.4.3"
   - miniflare@5.20261006.1-alpha
   - "@cloudflare/build-output-utils@0.9.0"
   - "@cloudflare/config@0.24.1"
