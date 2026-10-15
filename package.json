@@ -20,6 +20,7 @@
     "lint": "pnpm types && oxlint --deny-warnings --type-aware src test scripts vitest.config.ts vite.config.ts && pnpm --filter gavel-live-web lint && pnpm lint:anti-slop",
     "openapi": "tsx scripts/openapi.ts",
     "openapi:check": "tsx scripts/openapi.ts --check",
+    "prepare": "husky",
     "test": "vitest run && pnpm --filter gavel-live-web test",
     "test:production": "tsx test/production/integration.test.ts",
     "typecheck": "pnpm types && tsc --noEmit && tsc -p test/tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit && tsc -p test/production/tsconfig.json --noEmit",
@@ -40,6 +41,8 @@
     "@cloudflare/vitest-plugin": "1.4.3",
     "@types/node": "26.6.5",
     "cf": "1.0.0-beta.14",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
     "oxfmt": "^0.73.0",
     "oxlint": "^1.88.0",
     "oxlint-tsgolint": "^7.0.2004",
@@ -49,6 +52,15 @@
     "vite": "^8.3.4",
     "vitest": "5.0.4",
     "yaml": "^2.9.1"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}": [
+      "oxlint --fix --deny-warnings --type-aware --no-error-on-unmatched-pattern",
+      "oxfmt --config oxfmt.config.ts --no-error-on-unmatched-pattern"
+    ],
+    "*.{json,jsonc,json5,css,scss,md,mdx,yml,yaml,html,toml,vue,svelte,astro,graphql}": [
+      "oxfmt --config oxfmt.config.ts --no-error-on-unmatched-pattern"
+    ]
   },
   "packageManager": "pnpm@12.10.1"
 }
