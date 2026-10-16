@@ -1,9 +1,3 @@
-import type { OxfmtConfig } from "oxfmt";
-import base from "@aranlucas/oxforge/format-config";
+import { format } from "@aranlucas/oxforge/format";
 
-const config: OxfmtConfig = {
-  ...base,
-  ignorePatterns: [...(base.ignorePatterns ?? []), "apps/web/src/routeTree.gen.ts", "openapi.yaml"],
-};
-
-export default config;
+export default format({ ignorePatterns: ["apps/web/src/routeTree.gen.ts", "openapi.yaml"] });
