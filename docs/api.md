@@ -70,6 +70,10 @@ minor currency units: for example, `startPriceCents: 2500` means USD 25.00 when 
 `USD`. The duration is 1–86,400 seconds. Anti-sniping is disabled when both
 `antiSnipeWindowSeconds` and `extensionSeconds` are zero; otherwise both must be positive.
 
+A bid plus the auction's minimum increment must stay within JavaScript's safe-integer range
+(`Number.MAX_SAFE_INTEGER` cents). A higher bid returns `409 BID_TOO_HIGH` without changing the
+auction, history, or retry record; a bid whose next minimum equals the limit is accepted.
+
 ## Example REST flow
 
 Set `API`, `AUCTION_ID`, `SELLER_TOKEN`, and `BIDDER_TOKEN` in your shell first. Tokens must be
