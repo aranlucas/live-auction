@@ -70,3 +70,10 @@ contacting the staging API. The root `pnpm test` runs both backend and web suite
 
 The accepted visual concept is [`design/gavel-live-concept.png`](./design/gavel-live-concept.png).
 The production Worker name is configured as `gavel-live-web` in `cloudflare.config.ts`.
+
+The render smoke suite uses Vite's `preview()` API in Vitest hooks against the compiled
+Cloudflare Worker and client assets. Run `pnpm --filter gavel-live-web build` before
+`pnpm --filter gavel-live-web test:render`. Vite owns startup and shutdown on an OS-assigned
+`127.0.0.1` port; Vitest also closes a partially started preview when startup fails.
+`GAVEL_RENDER_BASE_URL` can target an existing `127.0.0.1` preview, which the suite leaves running.
+The two signed-out SSR cases need no credentials or deployed auction API.
