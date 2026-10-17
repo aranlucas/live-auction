@@ -506,6 +506,17 @@ export class Auction extends DurableObject<Env> {
         };
       }
 
+      // Every accepted bid must leave a representable next minimum in the public snapshot.
+      if (amountCents > Number.MAX_SAFE_INTEGER - row.min_increment_cents) {
+        return {
+          result: failure(
+            409,
+            "BID_TOO_HIGH",
+            "Bid plus the minimum increment must stay within safe integer cents",
+          ),
+        };
+      }
+
       const sequence = row.version + 1;
       const bidId = crypto.randomUUID();
 

@@ -84,6 +84,47 @@ async function readAuction(response: Response): Promise<ReadResult> {
 }
 
 describe("live auction API", () => {
+  it("rejects bids whose next minimum would exceed safe integer cents without changing history", async () => {
+    const id = "safe-integer-bid-limit";
+    await createAndStart(id);
+
+    const oversized = await request(`/v1/auctions/${id}/bids`, {
+      method: "POST",
+      headers: await bidderHeaders("bidder-limit", "overflow-bid"),
+      body: JSON.stringify({ amountCents: Number.MAX_SAFE_INTEGER - 99 }),
+    });
+
+    expect(oversized.status).toBe(409);
+    const rejected = operationFailureSchema.parse(await oversized.json());
+    expect(rejected.error.code).toBe("BID_TOO_HIGH");
+
+    const history = historyResultSchema.parse(
+      await (await request(`/v1/auctions/${id}/history`)).json(),
+    );
+
+    assert.equal(history.ok, true);
+    expect(history.auction.bidCount).toBe(0);
+    expect(history.auction.currentPriceCents).toBeNull();
+    expect(history.auction.version).toBe(2);
+    expect(history.events.map((event) => event.type)).toEqual([
+      "auction.created",
+      "auction.started",
+    ]);
+
+    const boundary = await request(`/v1/auctions/${id}/bids`, {
+      method: "POST",
+      headers: await bidderHeaders("bidder-limit", "overflow-bid"),
+      body: JSON.stringify({ amountCents: Number.MAX_SAFE_INTEGER - 100 }),
+    });
+
+    expect(boundary.status).toBe(200);
+    const accepted = await readActionResult(boundary);
+    assert.equal(accepted.ok, true);
+    expect(accepted.auction.currentPriceCents).toBe(Number.MAX_SAFE_INTEGER - 100);
+    expect(accepted.auction.nextMinimumBidCents).toBe(Number.MAX_SAFE_INTEGER);
+    expect(accepted.auction.bidCount).toBe(1);
+  });
+
   it("allows the configured web app to make credentialed API requests", async () => {
     const response = await exports.default.fetch(
       new Request("https://auction.test/v1/auctions/browser-room", {
