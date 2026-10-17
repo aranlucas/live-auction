@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
+import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, test } from "vitest";
 
@@ -41,8 +42,16 @@ beforeAll(async () => {
     });
     baseUrl = `http://127.0.0.1:${String(port)}`;
     preview = spawn(
-      "pnpm",
-      ["exec", "vite", "preview", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+      process.execPath,
+      [
+        fileURLToPath(new URL("bin/vite.js", import.meta.resolve("vite/package.json"))),
+        "preview",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        String(port),
+        "--strictPort",
+      ],
       {
         cwd: fileURLToPath(new URL("../../", import.meta.url)),
         stdio: ["ignore", "pipe", "pipe"],
@@ -81,8 +90,14 @@ beforeAll(async () => {
   await waitForPreview();
 });
 
-afterAll(() => {
-  preview?.kill("SIGTERM");
+afterAll(async () => {
+  if (preview?.exitCode !== null || preview.signalCode !== null) {
+    return;
+  }
+
+  const exited = once(preview, "exit");
+  preview.kill("SIGTERM");
+  await exited;
 });
 
 const cases = [
