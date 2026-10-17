@@ -1,20 +1,14 @@
 import assert from "node:assert/strict";
-import { spawn, type ChildProcess } from "node:child_process";
-import { createServer } from "node:net";
-import { once } from "node:events";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, test } from "vitest";
+import { preview, type PreviewServer } from "vite";
+import { afterAll, beforeAll, vi, test } from "vitest";
 
-let preview: ChildProcess | undefined;
+let server: PreviewServer | undefined;
 
 let baseUrl = process.env.GAVEL_RENDER_BASE_URL;
 
-let output = "";
-
 function localBaseUrl(): string {
-  if (!baseUrl) {
-    throw new Error("The local preview URL has not been initialized");
-  }
+  assert.ok(baseUrl, "Vite preview did not provide a local URL");
 
   return baseUrl;
 }
@@ -22,82 +16,38 @@ function localBaseUrl(): string {
 beforeAll(async () => {
   if (baseUrl) {
     assert.equal(new URL(baseUrl).hostname, "127.0.0.1", "Smoke tests only use a local preview");
-  } else {
-    const listener = createServer();
-    await new Promise<void>((resolve) => {
-      listener.listen(0, "127.0.0.1", resolve);
-    });
-    const address = listener.address();
-    assert.ok(address instanceof Object && "port" in address);
-    const port = address.port;
-    assert.ok(Number.isInteger(port) && port > 0);
-    await new Promise<void>((resolve, reject) => {
-      listener.close((error) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve();
-        }
-      });
-    });
-    baseUrl = `http://127.0.0.1:${String(port)}`;
-    preview = spawn(
-      process.execPath,
-      [
-        fileURLToPath(new URL("bin/vite.js", import.meta.resolve("vite/package.json"))),
-        "preview",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        String(port),
-        "--strictPort",
-      ],
-      {
-        cwd: fileURLToPath(new URL("../../", import.meta.url)),
-        stdio: ["ignore", "pipe", "pipe"],
+    await vi.waitFor(
+      async () => {
+        const response = await fetch(localBaseUrl(), { signal: AbortSignal.timeout(1000) });
+        await response.body?.cancel();
       },
+      { timeout: 20000, interval: 100 },
     );
 
-    const captureOutput = (chunk: Buffer) => {
-      output = (output + String(chunk)).slice(-16000);
-    };
-
-    preview.stdout?.on("data", captureOutput);
-    preview.stderr?.on("data", captureOutput);
-  }
-
-  const deadline = Date.now() + 20000;
-
-  async function waitForPreview() {
-    try {
-      await fetch(localBaseUrl(), { signal: AbortSignal.timeout(1000) });
-    } catch {
-      if (preview?.exitCode !== null && preview?.exitCode !== undefined) {
-        throw new Error(`Local preview did not start.\n${output}`);
-      }
-
-      if (Date.now() >= deadline) {
-        throw new Error(`Local preview did not start.\n${output}`);
-      }
-
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 100);
-      });
-      await waitForPreview();
-    }
-  }
-
-  await waitForPreview();
-});
-
-afterAll(async () => {
-  if (preview?.exitCode !== null || preview.signalCode !== null) {
     return;
   }
 
-  const exited = once(preview, "exit");
-  preview.kill("SIGTERM");
-  await exited;
+  const readyServer = await preview({
+    root: fileURLToPath(new URL("../../", import.meta.url)),
+    preview: { host: "127.0.0.1", port: 0, strictPort: true, open: false },
+    plugins: [
+      {
+        name: "render-fixture-cleanup",
+        enforce: "pre",
+        configurePreviewServer(previewServer) {
+          // Keep the handle before Cloudflare starts workerd, including failed startup.
+          server = previewServer;
+        },
+      },
+    ],
+  });
+
+  baseUrl = readyServer.resolvedUrls?.local[0];
+  assert.equal(new URL(localBaseUrl()).hostname, "127.0.0.1");
+}, 20000);
+
+afterAll(async () => {
+  await server?.close();
 });
 
 const cases = [
@@ -114,7 +64,7 @@ test.each(cases)(
 
     const html = await response.text();
 
-    assert.equal(response.status, 200, `SSR failed: ${html}\n${output}`);
+    assert.equal(response.status, 200, `SSR failed: ${html}`);
     assert.match(response.headers.get("content-type") ?? "", /text\/html/);
     assert.match(html, /Gavel Live/);
     assert.ok(html.includes(heading), `Missing signed-out heading: ${heading}`);
