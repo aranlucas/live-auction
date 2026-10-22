@@ -38,7 +38,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "2.0.0-beta.sha-805ec1ff3",
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.2",
     "@tanstack/router-cli": "^1.167.45",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",

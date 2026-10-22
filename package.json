@@ -37,7 +37,7 @@
   },
   "devDependencies": {
     "@aranlucas/oxforge": "^0.2.2",
-    "@cloudflare/vite-plugin": "2.0.0-beta.sha-805ec1ff3",
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.2",
     "@cloudflare/vitest-plugin": "1.4.6",
     "@types/node": "26.6.5",
     "cf": "1.0.0-beta.20",
