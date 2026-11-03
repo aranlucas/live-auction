@@ -1,0 +1,7 @@
+{
+  "extends": "../../scripts/tsconfig.json",
+  "compilerOptions": {
+    "skipLibCheck": true
+  },
+  "include": ["./**/*.ts", "../../vitest.tooling.config.ts"]
+}

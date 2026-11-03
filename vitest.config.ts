@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: { tsconfigPaths: true },
-  test: { include: ["test/**/*.test.ts"], exclude: ["test/production/**"] },
+  test: { include: ["test/**/*.test.ts"], exclude: ["test/production/**", "test/tooling/**"] },
   plugins: [
     cloudflareTest({
       experimental: { newConfig: { configPath: "./cloudflare.config.ts" } },
