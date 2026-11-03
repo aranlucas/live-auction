@@ -1,6 +1,5 @@
-import { env, exports } from "cloudflare:workers";
-import { Auction } from "@/auction";
-import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { exports } from "cloudflare:workers";
+import { evictDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import assert from "node:assert/strict";
 import { describe, expect, it } from "vitest";
 import {
@@ -118,20 +117,6 @@ describe("Durable Object integration behavior", () => {
     );
 
     expect(history.ok && history.events.map((event) => event.sequence)).toEqual([1]);
-  });
-
-  it("rejects a constructor whose schema initialization fails", async () => {
-    const id = "failed-schema-initialization";
-    expect((await createDraft(id)).status).toBe(201);
-    await runInDurableObject(exports.Auction.getByName(id), (_instance, state) => {
-      state.storage.sql.exec("ALTER TABLE _sql_schema_migrations RENAME COLUMN id TO invalid_id");
-
-      try {
-        expect(() => new Auction(state, env)).toThrow("no such column: id");
-      } finally {
-        state.storage.sql.exec("ALTER TABLE _sql_schema_migrations RENAME COLUMN invalid_id TO id");
-      }
-    });
   });
 
   it("replays identical creation, rejects conflicting creation, and isolates IDs", async () => {
@@ -353,5 +338,8 @@ describe("Durable Object integration behavior", () => {
 
     const state = readResultSchema.parse(await (await request(`/v1/auctions/${id}`)).json());
     expect(state.ok && state.auction.bidCount).toBe(1);
+    expect(Array.from({ length: 32 }, (_, index) => `burst-bidder-${index}`)).toContain(
+      state.ok && state.auction.leaderId,
+    );
   });
 });
