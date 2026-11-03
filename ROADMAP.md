@@ -3,12 +3,7 @@
 Updated 2026-10-26. Proposed product work after Digits/MCP priorities; these
 milestones do not turn the current demo into a payment or fulfillment service.
 
-## Starting point
-
-Baseline `a1de4c1cc5baacb6592fc0ba339d0940487ca9fe`: the [demo](README.md)
-already creates temporary seller/bidder/viewer sessions and supports timed
-auctions, persistent ordered events, idempotent commands and reconnect recovery.
-The useful next question is whether a host can run a complete event.
+The next question is whether a host can run a complete event.
 
 ## Ordered releases
 

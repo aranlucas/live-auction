@@ -5,17 +5,6 @@ YAML in [`openapi.yaml`](../openapi.yaml), and served as JSON at `/openapi.json`
 OpenAPI document is the complete reference for parameters and response schemas; this guide explains
 the behavior clients need to handle.
 
-## Base URLs
-
-| Environment    | Base URL                                                        |
-| -------------- | --------------------------------------------------------------- |
-| Local API      | `https://api.live-auction.localhost`                            |
-| Staging API    | `https://cloudflare-live-auction-staging.aranlucas.workers.dev` |
-| Production API | `https://cloudflare-live-auction.aranlucas.workers.dev`         |
-
-The production hostname assumes the default `workers.dev` domain. Use the deployed Worker URL if the
-Cloudflare account uses a different route or custom domain.
-
 ## Authentication and roles
 
 All `/v1/auctions/...` routes require a signed JWT. The API verifies its signature, issuer,
@@ -37,26 +26,9 @@ set an Authorization header:
 Sec-WebSocket-Protocol: auction.v1, auth.<JWT>
 ```
 
-## Routes
-
-| Method and path                            | Access                 | Behavior                                                |
-| ------------------------------------------ | ---------------------- | ------------------------------------------------------- |
-| `GET /health`                              | Public                 | Worker health and environment                           |
-| `GET /openapi.json`                        | Public                 | Generated OpenAPI document                              |
-| `POST /v1/demo-session`                    | Public, demo mode only | Creates a temporary demo auction identity set           |
-| `POST /v1/demo-session/{auctionId}/bidder` | Public, demo mode only | Creates another bidder identity for a live demo auction |
-| `PUT /v1/auctions/{auctionId}`             | Seller                 | Creates an auction in `DRAFT`                           |
-| `GET /v1/auctions/{auctionId}`             | Any role               | Reads the current auction snapshot                      |
-| `GET /v1/auctions/{auctionId}/history`     | Any role               | Reads ordered events after a sequence cursor            |
-| `POST /v1/auctions/{auctionId}/start`      | Seller                 | Starts a draft auction                                  |
-| `POST /v1/auctions/{auctionId}/bids`       | Bidder                 | Submits a bid in cents                                  |
-| `POST /v1/auctions/{auctionId}/close`      | Seller                 | Closes a live auction early                             |
-| `POST /v1/auctions/{auctionId}/cancel`     | Seller                 | Cancels an auction                                      |
-| `GET /v1/auctions/{auctionId}/events`      | Any role               | Upgrades to the auction event WebSocket                 |
-
-Demo routes are available only when `DEMO_MODE` is enabled. Demo JWTs are scoped to one auction and
-expire after 15 minutes. The bidder join route only issues a credential for a matching, live demo
-auction.
+Demo-session routes are public only when `DEMO_MODE` is `enabled`. Demo JWTs are scoped to one
+auction and expire after 15 minutes. The bidder join route only issues a credential for a matching,
+live demo auction. The [README](../README.md) links the staging API and demo.
 
 ## Commands and retries
 
@@ -65,10 +37,9 @@ retrying the same operation after a timeout or lost response. The API stores the
 actor and key, so an exact retry returns the saved response with `replayed: true`. Reusing a key
 with different action data returns an error. Use a new unique key for a new action.
 
-Auction IDs may contain 1–100 letters, numbers, underscores, or hyphens. Create bodies use integer
-minor currency units: for example, `startPriceCents: 2500` means USD 25.00 when `currency` is
-`USD`. The duration is 1–86,400 seconds. Anti-sniping is disabled when both
-`antiSnipeWindowSeconds` and `extensionSeconds` are zero; otherwise both must be positive.
+The seller can close a live auction only after its server deadline; an early close returns
+`409 AUCTION_NOT_ENDED`. Alarms, reads, and bids also close overdue auctions. A new close key after
+closure returns `ALREADY_CLOSED`; retry a successful close with its original key to replay it.
 
 A bid plus the auction's minimum increment must stay within JavaScript's safe-integer range
 (`Number.MAX_SAFE_INTEGER` cents). A higher bid returns `409 BID_TOO_HIGH` without changing the
@@ -114,22 +85,13 @@ numbers are per-auction and increase as changes commit.
 Remember the greatest cursor received. After reconnect, supply it as `afterSequence`; ignore event
 sequences already applied. If a snapshot says `resyncRequired: true`, fetch
 `/history?afterSequence=<last-applied-sequence>` and apply those events before continuing. The
-server also uses `ping` and `pong` WebSocket messages to check a connection.
+history endpoint is paginated: advance `afterSequence` to the last applied event and repeat until
+caught up. Send `ping` to receive `pong` for a connection heartbeat.
 
 ## Errors
 
-An API error uses this envelope and the HTTP status matches `error.status`:
-
-```json
-{
-  "ok": false,
-  "error": {
-    "status": 409,
-    "code": "AUCTION_NOT_LIVE",
-    "message": "The auction is not live"
-  }
-}
-```
+An API error has `ok: false` and an `error` containing `status`, `code`, and `message`. The HTTP
+status matches `error.status`; see the OpenAPI contract for the schema.
 
 Responses include an `X-Request-Id` header. Send a valid UUID as `X-Request-Id` to correlate your
 own logs with the Worker request log. Common failures include `UNAUTHENTICATED`, `FORBIDDEN`,
