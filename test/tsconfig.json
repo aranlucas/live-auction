@@ -5,5 +5,5 @@
     "types": ["@cloudflare/vitest-plugin/types"]
   },
   "include": ["./**/*.ts", "../vitest.config.ts", "../.cloudflare/types/index.d.ts"],
-  "exclude": ["./production/**"]
+  "exclude": ["./production/**", "./tooling/**"]
 }

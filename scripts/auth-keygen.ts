@@ -1,3 +1,5 @@
+// Native jose APIs supply signing primitives, but no CLI emits this auction key metadata and private-file permissions.
+// Retained command covered by test/tooling/auth-cli.test.ts.
 import { chmod, writeFile } from "node:fs/promises";
 import { exportJWK, generateKeyPair } from "jose";
 

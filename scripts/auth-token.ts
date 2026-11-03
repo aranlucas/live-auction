@@ -1,3 +1,5 @@
+// Native jose APIs supply signing primitives, but no CLI enforces this auction subject/role/issuer/audience contract.
+// Retained command covered by test/tooling/auth-cli.test.ts.
 import { z } from "zod";
 import { issueToken } from "./auth-support";
 
