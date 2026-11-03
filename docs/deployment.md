@@ -6,27 +6,12 @@ the Durable Object bindings, rate limiters, runtime settings, and deployment env
 - API: [`cloudflare.config.ts`](../cloudflare.config.ts)
 - Web client: [`apps/web/cloudflare.config.ts`](../apps/web/cloudflare.config.ts)
 
-The API Worker is named `cloudflare-live-auction`; its staging environment is
-`cloudflare-live-auction-staging`. The web Worker is named `gavel-live-web`. The public staging and
-demo URLs are listed in the root [README](../README.md).
-
 ## Configure authentication and origins
 
-The API reads these variables from its configuration mode:
-
-| Variable         | Purpose                                                   |
-| ---------------- | --------------------------------------------------------- |
-| `AUTH_ISSUER`    | Required JWT issuer claim                                 |
-| `AUTH_AUDIENCE`  | Required JWT audience claim                               |
-| `AUTH_JWKS_URL`  | Optional remote JWKS URL; takes precedence when non-empty |
-| `AUTH_JWKS_JSON` | Public JWKS JSON used when `AUTH_JWKS_URL` is empty       |
-| `WEB_ORIGINS`    | Comma-separated origins allowed by API CORS               |
-| `DEMO_MODE`      | Enables or disables public demo-session routes            |
-| `ENVIRONMENT`    | Environment label returned by `/health`                   |
-
-The API verifies ES256 and RS256 JWTs. The public JWKS belongs in `AUTH_JWKS_JSON` or at the
-configured JWKS URL. Never store a private signing key in a `bindings.text()` value or commit it to
-Git. Use the trusted identity provider's issuer and audience in deployed environments.
+Set `AUTH_ISSUER` and `AUTH_AUDIENCE` to the trusted identity provider. The API verifies ES256 and
+RS256 JWTs using `AUTH_JWKS_URL` when non-empty, otherwise `AUTH_JWKS_JSON`. Keep only public keys
+in configuration; private signing keys belong in Worker secrets. See [Security](../SECURITY.md)
+for issuer and credential requirements.
 
 The staging environment enables `DEMO_MODE`; production disables it. Staging demo routes sign
 15-minute, auction-scoped tokens with the `DEMO_AUTH_PRIVATE_JWK` Worker secret. Set that secret
@@ -66,16 +51,9 @@ pnpm --filter gavel-live-web deploy:dry-run
 pnpm --filter gavel-live-web deploy
 ```
 
-The scripts build with the Cloudflare Vite plugin before deployment. The API configuration declares
-SQLite Durable Object exports and rate-limit bindings for both modes. Review those bindings and
-authentication values before deploying a configuration change.
+These scripts build with the Cloudflare Vite plugin before deployment. Review the Durable Object
+and rate-limit bindings and authentication values in each mode before changing configuration.
 
-## CI and integration checks
-
-GitHub Actions generates types and runs typechecks, lint and formatting checks, OpenAPI
-freshness, unit/integration tests, web builds, and deployment dry runs on pull requests and pushes
-to `main`. It can also be started manually. The workflow does not deploy Workers.
-
-`pnpm test:production -- <worker-url>` runs an optional live integration flow that writes auction
-data to the supplied Worker. Run it only against a deployment you administer and with a private key
-that matches that Worker’s configured public key. See [Development](development.md) for options.
+The [CI workflow](../.github/workflows/ci.yml) runs checks and deployment dry runs, without deploying
+Workers. For an optional integration flow that writes data to a deployed API, see
+[Development](development.md#checks-and-generated-files).

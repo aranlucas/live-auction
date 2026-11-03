@@ -1,19 +1,20 @@
 # Gavel Live
 
-Gavel Live is a live-commerce auction demo. Sellers create and run timed auctions, bidders submit
+Gavel Live is an original, Whatnot-inspired live-commerce auction demo. Sellers run timed auctions, bidders submit
 offers, and viewers follow saved changes over WebSockets. The API is built with Cloudflare Workers,
 Hono, and Durable Objects; the browser client uses React and TanStack Start.
 
 [Open the live demo](https://gavel-live-web.aranlucas.workers.dev) ·
 [Staging API](https://cloudflare-live-auction-staging.aranlucas.workers.dev) ·
-[OpenAPI contract](openapi.yaml) · [System design guide](SYSTEM_DESIGN.md)
+[OpenAPI contract](openapi.yaml)
 
 ## Try the demo
 
 Open the live demo and choose **Launch instant demo**. It creates a temporary staging auction and
 seller, bidder, and viewer credentials. Use **Open another bidder** to join the same auction in a
-separate tab. Demo credentials expire after 15 minutes. The web client also supports a custom API,
-auction ID, and test tokens through **Room setup → Advanced setup**.
+separate tab with its own bidder identity. Each tab keeps credentials in `sessionStorage`; demo
+credentials expire after 15 minutes. The web client also supports a custom API, auction ID, and test
+tokens through **Room setup → Advanced setup**.
 
 ## Run locally
 
@@ -34,8 +35,8 @@ pnpm --filter gavel-live-web dev
 
 The client is available at `https://live-auction.localhost`. Both commands use Portless, which may
 ask for permission to bind port 443 and trust a local development certificate on first use. The
-local API has demo sessions enabled; configure a matching demo signing key as described in
-[Development](docs/development.md) before launching a local instant demo.
+client defaults to the staging API. For a local room, select the local API in advanced setup and
+configure credentials using [Development](docs/development.md#create-local-test-credentials).
 
 ## How it works
 
@@ -56,32 +57,13 @@ The API verifies signed JWTs and enforces seller, bidder, and viewer roles. A co
 `Idempotency-Key` so the client can safely retry after a lost response. See the
 [API guide](docs/api.md) for routes, authentication, and realtime recovery.
 
-## Repository map
+## Guides
 
-| Path                      | Purpose                                                                     |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `src/index.ts`            | Hono routes, auth and rate-limit middleware, CORS, and error responses      |
-| `src/auction.ts`          | Auction Durable Object, SQLite state, transactions, alarms, and idempotency |
-| `src/fanout.ts`           | WebSocket fanout and reconnect bootstrap                                    |
-| `src/model.ts`            | Shared Zod schemas and API types                                            |
-| `apps/web/`               | TanStack Start browser client and Cloudflare Worker config                  |
-| `openapi.yaml`            | Generated REST and WebSocket contract                                       |
-| `SYSTEM_DESIGN.md`        | Detailed system-design interview guide                                      |
-| `docs/`                   | API, development, and deployment guides                                     |
-| `test/`, `apps/web/test/` | API, Durable Object, and browser-client tests                               |
-
-## Common commands
-
-```sh
-pnpm check                       # Full local check, including builds and deployment dry runs
-pnpm test                        # API and web-client unit/integration tests
-pnpm openapi:check               # Confirm openapi.yaml matches the source schemas
-pnpm --filter gavel-live-web build
-pnpm deploy:dry-run              # Dry-run production and staging API deployments
-```
-
-See [Development](docs/development.md) for the full command list and test setup, and
-[Deployment](docs/deployment.md) for Cloudflare configuration and secrets.
+- [Development](docs/development.md): local credentials, checks, and generated files.
+- [Deployment](docs/deployment.md): Cloudflare authentication, origins, and demo-key rotation.
+- [System design interview](SYSTEM_DESIGN.md): worked correctness cases and architecture tradeoffs.
+- [Feature roadmap](ROADMAP.md): proposed releases and acceptance criteria.
+- [Web visual concept](apps/web/design/gavel-live-concept.png): the accepted design reference.
 
 ## Contributing and security
 
@@ -89,20 +71,3 @@ Changes to `src/model.ts` can affect both the API and web client. Regenerate the
 contract with `pnpm openapi`, then run `pnpm check` before submitting a change. Never commit private
 signing keys, access tokens, `.dev.vars`, or other credentials. See [Security](SECURITY.md) for
 credential handling and vulnerability reports.
-
-### Lint policy integrations
-
-Oxlint and Oxfmt inherit the shared Oxforge policy. There are no local formatting style
-settings or broad rule/category disables. Three narrowly scoped lint integrations remain:
-
-- TanStack route modules must export `Route` alongside their view component, so only that
-  required export name is allowed by the Fast Refresh rule.
-- `test/env.d.ts` augments Cloudflare's `ProvidedEnv` through an interface that extends the
-  generated environment; that file permits single-extends interfaces for declaration merging.
-- `src/index.ts` and `src/auction.ts` retain `console.log`/`console.error` for structured
-  Cloudflare request/error telemetry. CLI commands write their output to stdout/stderr directly.
-
-Five documented `no-await-in-loop` directives remain in integration checks: polling must
-observe one result before waiting and trying again, and ascending auction bids must complete
-in order. Independent fanout-shard evictions run together. Generated routing/OpenAPI files
-remain excluded from hand-authored lint/format checks.

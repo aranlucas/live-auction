@@ -55,20 +55,16 @@ Tokens expire after 15 minutes by default. For another issuer, audience, or priv
 `--issuer`, `--audience`, or `--private-jwk-path`; the API must be configured with the corresponding
 issuer, audience, and public key.
 
+The default local configuration disables demo issuance. For **Launch instant demo** against the
+local API, also set `DEMO_MODE=enabled` in `.dev.vars` and restart the API. Manual role tokens do
+not require demo mode. In advanced setup, use `https://api.live-auction.localhost`, a unique auction
+ID, and the matching tokens. Create the lot as seller, start it, then bid.
+
 ## Checks and generated files
 
-Useful root commands:
-
-| Command                                    | Purpose                                                                                                      |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `pnpm check`                               | Run type generation checks, typechecks, lint, format, OpenAPI checks, tests, builds, and deployment dry runs |
-| `pnpm test`                                | Run the API and web-client Vitest suites                                                                     |
-| `pnpm typecheck`                           | Typecheck API, tests, and scripts                                                                            |
-| `pnpm lint`                                | Lint API, scripts, and web app                                                                               |
-| `pnpm format`                              | Format supported project files                                                                               |
-| `pnpm openapi`                             | Regenerate `openapi.yaml` from source schemas                                                                |
-| `pnpm openapi:check`                       | Verify the checked-in OpenAPI file is current                                                                |
-| `pnpm --filter gavel-live-web test:render` | Run the web app's rendered-page smoke test                                                                   |
+Run `pnpm check` for the full local gate, including builds and deployment dry runs. For individual
+checks, use the scripts in the root and web [package files](../package.json)
+([web](../apps/web/package.json)).
 
 When changing API schemas, update `src/model.ts`, regenerate `openapi.yaml` with `pnpm openapi`, and
 check that the web app still consumes the shared model from `cloudflare-live-auction/model`.
@@ -78,18 +74,19 @@ TanStack file routes live in `apps/web/src/routes/`; the Vite dev/build flow gen
 API unit and Durable Object tests use the Cloudflare Vitest plugin and local Worker bindings. Web
 tests use scripted HTTP and WebSocket transports. They do not require the deployed staging API.
 
+The web render smoke suite needs a compiled build:
+
+```sh
+pnpm --filter gavel-live-web build
+pnpm --filter gavel-live-web test:render
+```
+
+Vitest starts and closes a local Vite preview, including cleanup after failed startup. The two
+signed-out SSR cases need no credentials or auction API. `GAVEL_RENDER_BASE_URL` can instead target
+an existing `127.0.0.1` preview; the suite leaves that server running.
+
 `pnpm test:production -- <worker-url>` runs a separate integration script against a deployed API.
 It creates auctions with unique IDs and performs real writes, so run it only against an environment
 you administer. It requires a signing key that matches that API's configured public key. Set
 `AUCTION_AUTH_PRIVATE_JWK`, `AUCTION_AUTH_ISSUER`, or `AUCTION_AUTH_AUDIENCE` to override the
 defaults; `--no-report` disables its HTML report.
-
-## Code map
-
-- `src/index.ts` defines HTTP routes, JWT authentication, roles, CORS, request limits, and error
-  responses.
-- `src/auction.ts` implements the per-auction Durable Object and SQLite state machine.
-- `src/fanout.ts` implements the sharded hibernating WebSocket delivery layer.
-- `src/model.ts` contains shared schemas, event types, and response models.
-- `apps/web/src/lib/auction-api.ts` contains REST helpers used by the web app.
-- `apps/web/src/hooks/use-auction-room.ts` coordinates snapshot, history, and WebSocket updates.
