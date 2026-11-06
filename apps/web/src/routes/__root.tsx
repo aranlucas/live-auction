@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
 import { Toaster } from "sonner";
@@ -48,13 +49,21 @@ interface RootDocumentProps {
   children: React.ReactNode;
 }
 
+const subscribeToHydration = () => () => {};
+
+const clientReady = () => true;
+
+const serverReady = () => false;
+
 export function RootDocument({ children }: RootDocumentProps) {
+  const hydrated = useSyncExternalStore(subscribeToHydration, clientReady, serverReady);
+
   return (
     <html lang="en">
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body data-hydrated={hydrated}>
         {children}
         <Toaster theme="dark" position="bottom-right" richColors />
         <Scripts />

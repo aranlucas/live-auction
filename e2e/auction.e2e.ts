@@ -43,7 +43,7 @@ for (const blockedStorage of [false, true]) {
     }
 
     await app.open(`/?api=${encodeURIComponent(api)}`);
-    await expect.poll(() => browser.evaluate(() => document.readyState)).toBe("complete");
+    await expect(browser.locator("body")).toHaveAttribute("data-hydrated", "true");
     await screen.getByRole("button", "Advanced setup", { exact: true }).tap();
     await browser.locator("details.advanced-setup > summary").tap();
     await screen.getByLabel("API base URL").fill(api);
