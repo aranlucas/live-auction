@@ -54,7 +54,7 @@ jobs:
       max-parallel: 1
       fail-fast: false
       matrix:
-        version: [fixed, cents-before, storage-before, currency-before]
+        version: [fixed, cents-before, storage-before, currency-before, pattern-before]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -79,6 +79,7 @@ jobs:
             cents-before) files="auction-panel.tsx" ;;
             storage-before) files="auction-room-page.tsx" ;;
             currency-before) files="activity-feed.tsx event-ledger.tsx" ;;
+            pattern-before) files="setup-dialog.tsx" ;;
           esac
           for file in $files; do
             git show fe344c9:apps/web/src/components/"$file" > apps/web/src/components/"$file"
@@ -103,8 +104,9 @@ jobs:
         run: |
           pattern="EUR$"
           expected="10.25"
-          if [ "$VERSION" = storage-before ]; then pattern="blocked storage"; expected="/auctions/"; fi
+          if [ "$VERSION" = storage-before ]; then pattern="blocked storage"; expected="expect.toHaveURL"; fi
           if [ "$VERSION" = currency-before ]; then expected="€10.25"; fi
+          if [ "$VERSION" = pattern-before ]; then expected="true"; fi
           set +e
           pnpm exec e2e run --grep "$pattern" > .e2e/reproduction.log 2>&1
           result=$?
@@ -121,7 +123,13 @@ jobs:
           assert.equal(selected[0].status, 'failed');
           const error = selected[0].attempts.at(-1).error;
           assert.equal(error.code, 'ASSERTION_FAILED');
-          assert.ok(error.details.expected.includes(process.env.EXPECTED));
+          if (process.env.VERSION === 'storage-before') {
+            assert.match(error.message, /^expect\.toHaveURL failed\nexpected: URL/);
+            assert.ok(error.message.includes('auctions'));
+            assert.match(error.message, /observed: URL http:\/\/127\.0\.0\.1:3000\/\?api=/);
+          } else {
+            assert.ok(error.details.expected.includes(process.env.EXPECTED));
+          }
           console.log('Confirmed targeted pre-fix assertion:', error);
           JS
       - name: Upload browser and Worker evidence

@@ -47,6 +47,16 @@ for (const blockedStorage of [false, true]) {
     await screen.getByRole("button", "Advanced setup", { exact: true }).tap();
     await browser.locator("details.advanced-setup > summary").tap();
     await screen.getByLabel("API base URL").fill(api);
+    await screen.getByLabel("Auction ID", { exact: true }).fill("invalid room");
+    await expect
+      .poll(() =>
+        browser.evaluate(() => {
+          const field = document.querySelector<HTMLInputElement>("input[pattern]");
+
+          return field?.validity.patternMismatch;
+        }),
+      )
+      .toBe(true);
     await screen.getByLabel("Auction ID", { exact: true }).fill(auctionId);
     await screen.getByLabel("Seller token").fill(sellerToken);
     await screen.getByLabel("Bidder token").fill(bidderToken);

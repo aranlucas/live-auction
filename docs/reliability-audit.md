@@ -28,7 +28,9 @@ Location: `apps/web/src/components/auction-panel.tsx`, form defaults/effect and 
 
 Read current published e2e quickstart, CI, GitHub Actions, web/browser/config docs and the supplied pinned Vite example. npm confirms `e2e@0.23.0` is tester-army/e2e and requires Node ^22.22.3 or >=24.8; `@e2e-dev/web@0.15.5` accepts e2e >=0.22.1 <1. These exact published versions will be locked. The web app is an honest supported Chromium target; use deterministic actions/assertions with no model or credentials. A local CI Worker with a public test JWKS provides real API, persistence and WebSocket behavior. No staging/production resources are used. Existing CI gates remain intact.
 
-Independent review and CI evidence: pending.
+Independent review: three static rounds confirmed R1–R3; objections about route-remount credential loss, shallow baseline checkout and loose proof checks were corrected. Final review found no remaining blocking code issue. Explicit React hydration readiness now gates browser actions.
+
+CI run [42299080634](https://github.com/aranlucas/live-auction/actions/runs/42299080634), head `621fbad`: the original CI gate passed (type/lint/format/OpenAPI, 23 Worker integration tests, 7 tooling tests, 21 web tests, 2 compiled SSR tests, builds and dry runs). Both real e2e journeys passed. Storage baseline reproduced the expected navigation failure, but its proof reader incorrectly assumed URL errors have `details`; corrected to verify its assertion message. Latest CI pending after that correction and R4 below.
 
 ### R2 — unavailable session storage aborts room setup (medium, high confidence)
 
@@ -37,3 +39,7 @@ Independent review and CI evidence: pending.
 ### R3 — non-USD activity and winning ledger use USD (medium, high confidence)
 
 `activity-feed.tsx:eventCopy` and `event-ledger.tsx:eventDetail` omit the auction currency when formatting bid/winner cents. An accepted EUR auction displays euro prices in controls but dollars in activity/closing history. Pass the authoritative auction currency (default USD retained for existing component callers). Regression: EUR activity and winning ledger assertions in the real journey.
+
+### R4 — browser ignores invalid auction-ID pattern (low impact, high confidence)
+
+CI browser evidence in the R2 baseline logged a SyntaxError for `setup-dialog.tsx`'s `[A-Za-z0-9_-]{1,100}` pattern under the HTML `v` regex flag. The browser silently ignores an invalid pattern, so native validation no longer rejects spaces. Zod/API validation still protects persisted IDs. Escape the literal hyphen; the journey now verifies the browser reports `patternMismatch` for `invalid room` before connecting a valid ID. A separate original-component CI variant must fail that assertion.

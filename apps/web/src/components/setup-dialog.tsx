@@ -120,7 +120,7 @@ export function SetupDialog({
                         value={field.state.value}
                         onBlur={field.handleBlur}
                         onChange={(event) => field.handleChange(event.target.value)}
-                        pattern="[A-Za-z0-9_-]{1,100}"
+                        pattern={"[A-Za-z0-9_\\-]{1,100}"}
                         spellCheck={false}
                       />
                     </label>
