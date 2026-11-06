@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 import {
   auctionActionResultSchema,
   createAuctionInputSchema,
@@ -13,32 +13,7 @@ import {
   type ReadResult,
 } from "cloudflare-live-auction/model";
 
-export interface TestCredentials {
-  sellerToken: string;
-  bidderToken: string;
-  viewerToken: string;
-}
-
-export interface TestRoomConfig extends TestCredentials {
-  apiBaseUrl: string;
-  auctionId: string;
-}
-
-export const testRoomConfigSchema = z.strictObject({
-  apiBaseUrl: z.url(),
-  auctionId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/),
-  sellerToken: z.string(),
-  bidderToken: z.string(),
-  viewerToken: z.string(),
-});
-
-export const defaultRoomConfig: TestRoomConfig = {
-  apiBaseUrl: "https://cloudflare-live-auction-staging.aranlucas.workers.dev",
-  auctionId: "gavel-live-demo",
-  sellerToken: "",
-  bidderToken: "",
-  viewerToken: "",
-};
+import type { TestRoomConfig } from "./room-config";
 
 export const defaultAuctionInput: CreateAuctionInput = createAuctionInputSchema.parse({
   title: "Vintage Leica M3",
@@ -149,7 +124,7 @@ export function readAuction(
   return request(readResultSchema, endpoint(config), token, { signal });
 }
 
-export function readHistory(
+export async function readHistory(
   config: TestRoomConfig,
   token: string,
   signal?: AbortSignal,
@@ -158,7 +133,15 @@ export function readHistory(
   url.searchParams.set("afterSequence", "0");
   url.searchParams.set("limit", "100");
 
-  return request(historyResultSchema, url, token, { signal });
+  const result = await request(historyResultSchema, url, token, { signal });
+
+  if (result.ok && result.auction.version > 100) {
+    url.searchParams.set("afterSequence", String(result.auction.version - 100));
+
+    return request(historyResultSchema, url, token, { signal });
+  }
+
+  return result;
 }
 
 export function createAuction(

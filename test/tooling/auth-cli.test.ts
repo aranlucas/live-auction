@@ -112,3 +112,29 @@ it("rejects an unsupported auction role before issuing a token", () => {
   expect(result.stdout).toBe("");
   expect(result.stderr).toContain("role");
 });
+
+it("rejects unknown token options instead of issuing a token with ignored settings", () => {
+  const { privatePath } = keyFiles();
+
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      "scripts/auth-token.ts",
+      "--subject",
+      "synthetic-user",
+      "--role",
+      "bidder",
+      "--private-jwk-path",
+      privatePath,
+      "--audence",
+      "intended-audience",
+    ],
+    { encoding: "utf8" },
+  );
+
+  expect(result.status).not.toBe(0);
+  expect(result.stdout).toBe("");
+  expect(result.stderr).toContain("audence");
+});

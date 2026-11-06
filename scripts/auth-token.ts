@@ -1,5 +1,6 @@
 // Native jose APIs supply signing primitives, but no CLI enforces this auction subject/role/issuer/audience contract.
 // Retained command covered by test/tooling/auth-cli.test.ts.
+import { parseArgs } from "node:util";
 import { z } from "zod";
 import { issueToken } from "./auth-support";
 
@@ -11,29 +12,24 @@ const argumentsSchema = z.strictObject({
   privateJwkPath: z.string().min(1),
 });
 
-const values = new Map<string, string>();
-
-const cliArguments = process.argv.slice(2).filter((argument) => argument !== "--");
-
-for (let index = 0; index < cliArguments.length; index += 2) {
-  const key = cliArguments[index];
-  const value = cliArguments[index + 1];
-
-  if (!key?.startsWith("--") || value === undefined) {
-    throw new Error(
-      "Usage: pnpm auth:token -- --subject <id> --role <role> [--issuer <url>] [--audience <aud>]",
-    );
-  }
-
-  values.set(key.slice(2), value);
-}
+const { values } = parseArgs({
+  args: process.argv.slice(2).filter((argument) => argument !== "--"),
+  allowPositionals: false,
+  options: {
+    subject: { type: "string" },
+    role: { type: "string" },
+    issuer: { type: "string" },
+    audience: { type: "string" },
+    "private-jwk-path": { type: "string" },
+  },
+});
 
 const input = argumentsSchema.parse({
-  subject: values.get("subject"),
-  role: values.get("role"),
-  issuer: values.get("issuer") ?? "https://cloudflare-live-auction.example",
-  audience: values.get("audience") ?? "cloudflare-live-auction",
-  privateJwkPath: values.get("private-jwk-path") ?? ".auction-auth-private.jwk",
+  subject: values["subject"],
+  role: values["role"],
+  issuer: values["issuer"] ?? "https://cloudflare-live-auction.example",
+  audience: values["audience"] ?? "cloudflare-live-auction",
+  privateJwkPath: values["private-jwk-path"] ?? ".auction-auth-private.jwk",
 });
 
 process.stdout.write(

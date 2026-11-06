@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { defaultRoomConfig } from "@/lib/auction-api";
-import { restoreRoomConfig } from "@/lib/room-config";
+import { defaultRoomConfig, restoreRoomConfig } from "@/lib/room-config";
 
 const stored = JSON.stringify({
   ...defaultRoomConfig,
   auctionId: "saved-room",
   viewerToken: "saved-viewer",
   sellerToken: "saved-seller",
+  bidderToken: "saved-bidder",
 });
 
 describe("room configuration restoration", () => {
@@ -18,12 +18,29 @@ describe("room configuration restoration", () => {
     expect(restoreRoomConfig({}, value).restored).toBe(false);
   });
 
-  it("restores saved credentials and honors the route API", () => {
-    const result = restoreRoomConfig({ routeApiBaseUrl: "https://auction.test" }, stored);
+  it("restores saved credentials for the saved API", () => {
+    const result = restoreRoomConfig({ routeApiBaseUrl: defaultRoomConfig.apiBaseUrl }, stored);
     expect(result.restored).toBe(true);
     expect(result.value.auctionId).toBe("saved-room");
     expect(result.value.viewerToken).toBe("saved-viewer");
-    expect(result.value.apiBaseUrl).toBe("https://auction.test");
+    expect(result.value.apiBaseUrl).toBe(defaultRoomConfig.apiBaseUrl);
+  });
+
+  it("does not send saved credentials to a route-selected API", () => {
+    const result = restoreRoomConfig(
+      {
+        routeAuctionId: "saved-room",
+        routeApiBaseUrl: "https://other-api.test",
+      },
+      stored,
+    );
+
+    expect(result.restored).toBe(false);
+    expect(result.value.apiBaseUrl).toBe("https://other-api.test");
+    expect(result.value.auctionId).toBe("saved-room");
+    expect(result.value.viewerToken).toBe("");
+    expect(result.value.sellerToken).toBe("");
+    expect(result.value.bidderToken).toBe("");
   });
 
   it("does not reuse credentials when switching to a different auction", () => {

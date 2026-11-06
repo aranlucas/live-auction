@@ -3,58 +3,7 @@ import { bindings, defineConfig, exports } from "cf/config";
 import * as entrypoint from "./src/index.ts" with { type: "cf-worker" };
 
 export default defineConfig((ctx) => {
-  if (ctx.mode === "staging") {
-    return {
-      worker: {
-        exports: {
-          Auction: exports.durableObject({ storage: "sqlite" }),
-          AuctionFanout: exports.durableObject({ storage: "sqlite" }),
-        },
-        name: "cloudflare-live-auction-staging",
-        compatibilityDate: "2026-08-22",
-        compatibilityFlags: ["nodejs_compat"],
-        entrypoint,
-        observability: {
-          enabled: true,
-          logs: {
-            enabled: true,
-            headSamplingRate: 1,
-          },
-          traces: {
-            enabled: true,
-            headSamplingRate: 1,
-          },
-        },
-        env: {
-          ENVIRONMENT: bindings.text("staging"),
-          DEMO_MODE: bindings.text("enabled"),
-          AUTH_ISSUER: bindings.text("https://cloudflare-live-auction.example"),
-          AUTH_AUDIENCE: bindings.text("cloudflare-live-auction"),
-          AUTH_JWKS_URL: bindings.text(""),
-          WEB_ORIGINS: bindings.text(
-            "https://live-auction.localhost,https://gavel-live-web.aranlucas.workers.dev",
-          ),
-          AUTH_JWKS_JSON: bindings.text(
-            '{"keys":[{"kty":"EC","x":"YPrGDt7Vu1jwOGcQFdVDfbgQjiBe_Ds_8d_nKhVGeX8","y":"TpHR0QvFesA5VUnYeLLk2r_sPCJwMoVg3VPxR4I1gb4","crv":"P-256","alg":"ES256","use":"sig","kid":"6332bef5-8e80-4ef0-8022-8ed9ebd78377"}]}',
-          ),
-          READ_RATE_LIMITER: bindings.rateLimit({
-            namespace: "1101",
-            simple: {
-              limit: 600,
-              period: 60,
-            },
-          }),
-          COMMAND_RATE_LIMITER: bindings.rateLimit({
-            namespace: "1102",
-            simple: {
-              limit: 600,
-              period: 60,
-            },
-          }),
-        },
-      },
-    };
-  }
+  const staging = ctx.mode === "staging";
 
   return {
     worker: {
@@ -62,7 +11,7 @@ export default defineConfig((ctx) => {
         Auction: exports.durableObject({ storage: "sqlite" }),
         AuctionFanout: exports.durableObject({ storage: "sqlite" }),
       },
-      name: "cloudflare-live-auction",
+      name: staging ? "cloudflare-live-auction-staging" : "cloudflare-live-auction",
       compatibilityDate: "2026-08-22",
       compatibilityFlags: ["nodejs_compat"],
       entrypoint,
@@ -74,12 +23,12 @@ export default defineConfig((ctx) => {
         },
         traces: {
           enabled: true,
-          headSamplingRate: 0.1,
+          headSamplingRate: staging ? 1 : 0.1,
         },
       },
       env: {
-        ENVIRONMENT: bindings.text("production"),
-        DEMO_MODE: bindings.text("disabled"),
+        ENVIRONMENT: bindings.text(staging ? "staging" : "production"),
+        DEMO_MODE: bindings.text(staging ? "enabled" : "disabled"),
         AUTH_ISSUER: bindings.text("https://cloudflare-live-auction.example"),
         AUTH_AUDIENCE: bindings.text("cloudflare-live-auction"),
         AUTH_JWKS_URL: bindings.text(""),
@@ -90,16 +39,16 @@ export default defineConfig((ctx) => {
           '{"keys":[{"kty":"EC","x":"YPrGDt7Vu1jwOGcQFdVDfbgQjiBe_Ds_8d_nKhVGeX8","y":"TpHR0QvFesA5VUnYeLLk2r_sPCJwMoVg3VPxR4I1gb4","crv":"P-256","alg":"ES256","use":"sig","kid":"6332bef5-8e80-4ef0-8022-8ed9ebd78377"}]}',
         ),
         READ_RATE_LIMITER: bindings.rateLimit({
-          namespace: "1201",
+          namespace: staging ? "1101" : "1201",
           simple: {
-            limit: 240,
+            limit: staging ? 600 : 240,
             period: 60,
           },
         }),
         COMMAND_RATE_LIMITER: bindings.rateLimit({
-          namespace: "1202",
+          namespace: staging ? "1102" : "1202",
           simple: {
-            limit: 120,
+            limit: staging ? 600 : 120,
             period: 60,
           },
         }),

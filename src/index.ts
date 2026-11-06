@@ -7,7 +7,7 @@ import { cors } from "hono/cors";
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
-import { authenticate, AuthenticationError, websocketProtocols } from "./auth";
+import { authenticate, AuthenticationError } from "./auth";
 import {
   createDemoBidderSession,
   createDemoSession,
@@ -24,6 +24,7 @@ import {
   type Actor,
   type OperationFailure,
 } from "./model";
+import { fanoutShard } from "./realtime-topology";
 import { buildOpenApiDocument, registerOpenApi } from "./openapi";
 
 export { Auction } from "./auction";
@@ -461,12 +462,6 @@ app.get(
   websocketHeaders,
   (context) => {
     const { auctionId } = context.req.valid("param");
-    const protocols = websocketProtocols(context.req.raw);
-
-    if (!protocols.includes("auction.v1")) {
-      throw new HttpError(426, "UPGRADE_REQUIRED", "Use the auction.v1 WebSocket protocol");
-    }
-
     const shard = fanoutShard(context.get("actor").id);
     const headers = new Headers(context.req.raw.headers);
     headers.delete("Authorization");
@@ -556,17 +551,6 @@ function jsonFailure(status: number, code: string, message: string, requestId?: 
   });
 
   return json(body, status, requestId);
-}
-
-function fanoutShard(actorId: string): number {
-  let hash = 2_166_136_261;
-
-  for (const character of actorId) {
-    hash ^= character.codePointAt(0) ?? 0;
-    hash = Math.imul(hash, 16_777_619);
-  }
-
-  return (hash >>> 0) % 4;
 }
 
 export default app;

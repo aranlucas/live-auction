@@ -11,13 +11,9 @@ import {
   readResultSchema,
   type AuctionEvent,
 } from "cloudflare-live-auction/model";
-import {
-  bestReadToken,
-  readAuction,
-  readHistory,
-  realtimeUrl,
-  type TestRoomConfig,
-} from "#/lib/auction-api";
+import { bestReadToken, readAuction, readHistory, realtimeUrl } from "#/lib/auction-api";
+
+import type { TestRoomConfig } from "#/lib/room-config";
 
 const connectionLabels: Record<ReadyState, string> = {
   [ReadyState.CONNECTING]: "Connecting",
@@ -44,8 +40,6 @@ export function useAuctionRoom(config: TestRoomConfig) {
   const auctionQuery = useQuery({
     queryKey,
     queryFn: ({ signal }) => readAuction(config, readToken, signal),
-    // Both HTTP completions and socket writes pass through this cache-commit seam.
-    // Comparing here (rather than when a request starts) keeps the greatest version.
     structuralSharing: (previous, incoming) => {
       const current = readResultSchema.safeParse(previous);
       const next = readResultSchema.parse(incoming);
@@ -83,7 +77,6 @@ export function useAuctionRoom(config: TestRoomConfig) {
 
   const { readyState, getWebSocket } = useWebSocket(socketEndpoint, {
     onMessage: (message) => {
-      // A retained lastMessage must never be replayed into another room's query key.
       const socket = getWebSocket();
 
       const payload = z.string().safeParse(message.data);

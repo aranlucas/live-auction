@@ -5,7 +5,6 @@ import { parseArgs } from "node:util";
 import { stringify } from "yaml";
 import { buildOpenApiDocument } from "../src/openapi";
 
-// Reject obsolete flags instead of silently writing a file when a caller intended a check.
 parseArgs({ options: {}, allowPositionals: false });
 
 const outputPath = new URL("../openapi.yaml", import.meta.url);

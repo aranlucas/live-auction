@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 import {
   auctionEventSchema,
+  auctionStateSchema,
   auctionViewSchema,
   auctionActionSuccessSchema,
   eventPayloadSchemas,
@@ -21,7 +22,7 @@ import {
   type RealtimeEventMessage,
 } from "./model";
 
-const FANOUT_SHARD_COUNT = 4;
+import { FANOUT_SHARD_COUNT } from "./realtime-topology";
 
 const REALTIME_CATCHUP_LIMIT = 200;
 
@@ -32,7 +33,7 @@ const auctionRowSchema = z.strictObject({
   seller_id: z.string(),
   title: z.string(),
   currency: z.string(),
-  state: z.enum(["DRAFT", "LIVE", "CLOSED", "CANCELLED"]),
+  state: auctionStateSchema,
   start_price_cents: z.int().positive(),
   current_price_cents: z.int().positive().nullable(),
   min_increment_cents: z.int().positive(),
