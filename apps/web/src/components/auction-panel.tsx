@@ -104,7 +104,7 @@ export function AuctionPanel({
   const isLive = auction?.state === "LIVE";
 
   const form = useForm({
-    defaultValues: { amount: (nextMinimum / 100).toFixed(0) },
+    defaultValues: { amount: (nextMinimum / 100).toFixed(2) },
     onSubmit: async ({ value }) => {
       const cents = Math.round(Number(value.amount) * 100);
 
@@ -115,7 +115,7 @@ export function AuctionPanel({
   });
 
   useEffect(() => {
-    form.setFieldValue("amount", (nextMinimum / 100).toFixed(0));
+    form.setFieldValue("amount", (nextMinimum / 100).toFixed(2));
   }, [form, nextMinimum]);
 
   if (!auction) {
@@ -281,7 +281,7 @@ export function AuctionPanel({
                 <input
                   type="number"
                   min={nextMinimum / 100}
-                  step="1"
+                  step="0.01"
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(event) => field.handleChange(event.target.value)}

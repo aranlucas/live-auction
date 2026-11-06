@@ -117,7 +117,11 @@ function AuctionRoom({
   const saveConfig = useCallback(
     (nextConfig: TestRoomConfig) => {
       setConfig(nextConfig);
-      window.sessionStorage.setItem(storageKey, JSON.stringify(nextConfig));
+      try {
+        window.sessionStorage.setItem(storageKey, JSON.stringify(nextConfig));
+      } catch {
+        // A blocked or full session store must not interrupt the in-memory room.
+      }
       navigateToAuction(nextConfig);
     },
     [navigateToAuction],
@@ -246,7 +250,7 @@ function AuctionRoom({
       <main className="room-layout" id="room" tabIndex={-1}>
         <div className="stage-column">
           <LiveStage auction={room.auction} />
-          <ActivityFeed events={room.events} />
+          <ActivityFeed events={room.events} currencyCode={room.auction?.currency} />
         </div>
         <div className="control-column">
           {queryError && !isMissing ? (
@@ -283,7 +287,11 @@ function AuctionRoom({
             onOpenSetup={() => setSetupOpen(true)}
             showJoinDemo={isDemoAuction && !config.bidderToken}
           />
-          <EventLedger events={room.events} connected={room.connected} />
+          <EventLedger
+            events={room.events}
+            connected={room.connected}
+            currencyCode={room.auction?.currency}
+          />
         </div>
       </main>
 

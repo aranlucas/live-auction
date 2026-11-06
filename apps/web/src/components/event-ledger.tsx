@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { AuctionEvent } from "cloudflare-live-auction/model";
 import { compactTime, currency } from "#/lib/format";
 
-function eventDetail(event: AuctionEvent): string {
+function eventDetail(event: AuctionEvent, currencyCode: string): string {
   switch (event.type) {
     case "auction.created":
       return `currency=${event.payload.currency} start=${event.payload.startPriceCents}`;
@@ -15,7 +15,7 @@ function eventDetail(event: AuctionEvent): string {
       return `actor=${event.actorId}`;
     case "auction.closed":
       return event.payload.winnerId
-        ? `winner=${event.payload.winnerId} amount=${currency(event.payload.amountCents)}`
+        ? `winner=${event.payload.winnerId} amount=${currency(event.payload.amountCents, currencyCode)}`
         : "winner=null";
   }
 
@@ -26,10 +26,11 @@ function eventDetail(event: AuctionEvent): string {
 
 interface EventLedgerProps {
   events: AuctionEvent[];
+  currencyCode?: string;
   connected: boolean;
 }
 
-export function EventLedger({ events, connected }: EventLedgerProps) {
+export function EventLedger({ events, connected, currencyCode = "USD" }: EventLedgerProps) {
   const [paused, setPaused] = useState(false);
   const [pausedEvents, setPausedEvents] = useState(events);
   const rows = (paused ? pausedEvents : events).toReversed().slice(0, 8);
@@ -80,7 +81,7 @@ export function EventLedger({ events, connected }: EventLedgerProps) {
                 <tr key={event.sequence}>
                   <td>{event.sequence}</td>
                   <td className={`type-${event.type}`}>{event.type}</td>
-                  <td>{eventDetail(event)}</td>
+                  <td>{eventDetail(event, currencyCode)}</td>
                   <td>{compactTime(event.occurredAt)}</td>
                 </tr>
               ))
