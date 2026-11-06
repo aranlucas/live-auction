@@ -15,7 +15,7 @@ Baseline: remote default `fe344c9` (merged untangle pass #70). Clean isolated wo
 
 ### R1 — custom bids lose cents (medium impact, high confidence)
 
-Location: `apps/web/src/components/auction-panel.tsx`, form defaults/effect and number input. Trigger: a valid API auction has minimum 1025 or 1075 cents (the contract accepts positive integer cents). Expected: the form offers $10.25/$10.75 and allows cent increments. Actual: `toFixed(0)` fills $10/$11 and `step="1"` prevents ordinary cent increments. The rounded default is below min or mismatched to the input step, blocking ordinary browser submission. Fix the decimal presentation and input step without changing the API or auction rules. Regression: real browser checks exact initial and updated values, submits 1025 then 1035 cents, and verifies persisted history/price.
+Location: `apps/web/src/components/auction-panel.tsx`, form defaults/effect and number input. Trigger: a valid API auction has minimum 1025 or 1075 cents (the contract accepts positive integer cents). Expected: the form offers $10.25/$10.75 and allows cent increments. Actual: `toFixed(0)` fills $10/$11 and `step="1"` prevents ordinary cent increments. The rounded default is below min or mismatched to the input step, blocking ordinary browser submission. Fix the decimal presentation and input step without changing the API or auction rules. Regression: real browser checks exact initial and updated values, submits 1025 then 1045 cents (with an updated minimum of 1035), and verifies persisted history/price.
 
 ## Reconciled and rejected hypotheses
 
@@ -32,7 +32,7 @@ Independent review and CI evidence: pending.
 
 ### R2 — unavailable session storage aborts room setup (medium, high confidence)
 
-`auction-room-page.tsx:saveConfig` handles read failures on restore but lets `sessionStorage.setItem` throw after updating state and before navigating. A browser that blocks storage therefore reports failure and interrupts demo creation/start or advanced setup. Session persistence is an enhancement; retain the in-memory room and navigation when writing storage fails. Regression: block setItem with a SecurityError and connect/bid through the real browser and Worker.
+`auction-room-page.tsx:saveConfig` handles read failures on restore but lets `sessionStorage.setItem` throw after updating state and before navigating. A browser that blocks storage therefore reports failure and interrupts demo creation/start or advanced setup. Session persistence is an enhancement; retain credentials in the existing per-router Query cache across route remounts and continue navigation when writing storage fails. Regression: block setItem with a SecurityError and connect/bid through the real browser and Worker.
 
 ### R3 — non-USD activity and winning ledger use USD (medium, high confidence)
 

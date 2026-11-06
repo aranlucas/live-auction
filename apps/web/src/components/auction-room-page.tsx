@@ -86,9 +86,11 @@ function AuctionRoom({
     }
 
     try {
-      return restoreRoomConfig(route, window.sessionStorage.getItem(storageKey));
+      const cached = queryClient.getQueryData<string>(["room-config"]);
+
+      return restoreRoomConfig(route, cached ?? window.sessionStorage.getItem(storageKey));
     } catch {
-      return restoreRoomConfig(route, null);
+      return restoreRoomConfig(route, queryClient.getQueryData<string>(["room-config"]) ?? null);
     }
   });
 
@@ -117,14 +119,17 @@ function AuctionRoom({
   const saveConfig = useCallback(
     (nextConfig: TestRoomConfig) => {
       setConfig(nextConfig);
+      queryClient.setQueryData(["room-config"], JSON.stringify(nextConfig));
+
       try {
         window.sessionStorage.setItem(storageKey, JSON.stringify(nextConfig));
       } catch {
         // A blocked or full session store must not interrupt the in-memory room.
       }
+
       navigateToAuction(nextConfig);
     },
-    [navigateToAuction],
+    [navigateToAuction, queryClient],
   );
 
   useEffect(() => {

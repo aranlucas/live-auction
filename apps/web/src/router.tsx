@@ -12,6 +12,8 @@ export function getRouter() {
     },
   });
 
+  queryClient.setQueryDefaults(["room-config"], { gcTime: Infinity });
+
   const router = createTanStackRouter({
     routeTree,
     scrollRestoration: true,

@@ -61,12 +61,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
           cache: true
           require-lockfile: true
       - name: Typecheck browser harness
-        run: pnpm exec tsc --noEmit --target esnext --module esnext --moduleResolution bundler --skipLibCheck e2e.config.ts e2e/auction.e2e.ts
+        run: pnpm exec tsc -p e2e/tsconfig.json
       - name: Install Chromium
         run: pnpm exec e2e-web install chromium --with-deps
       - name: Restore only the defective component for CI reproduction
@@ -110,7 +111,19 @@ jobs:
           set -e
           cat .e2e/reproduction.log
           test "$result" -eq 1
-          grep -F "$expected" .e2e/reproduction.log
+          EXPECTED="$expected" node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const { run } = JSON.parse(readFileSync('.e2e/report.json', 'utf8'));
+          assert.equal(run.errors.length, 0);
+          const selected = run.results.filter(result => result.selected);
+          assert.equal(selected.length, 1);
+          assert.equal(selected[0].status, 'failed');
+          const error = selected[0].attempts.at(-1).error;
+          assert.equal(error.code, 'ASSERTION_FAILED');
+          assert.ok(error.details.expected.includes(process.env.EXPECTED));
+          console.log('Confirmed targeted pre-fix assertion:', error);
+          JS
       - name: Upload browser and Worker evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
