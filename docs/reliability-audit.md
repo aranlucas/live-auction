@@ -30,7 +30,7 @@ Read current published e2e quickstart, CI, GitHub Actions, web/browser/config do
 
 Independent review: three static rounds confirmed R1–R3; objections about route-remount credential loss, shallow baseline checkout and loose proof checks were corrected. Final review found no remaining blocking code issue. Explicit React hydration readiness now gates browser actions.
 
-CI run [42299080634](https://github.com/aranlucas/live-auction/actions/runs/42299080634), head `621fbad`: the original CI gate passed (type/lint/format/OpenAPI, 23 Worker integration tests, 7 tooling tests, 21 web tests, 2 compiled SSR tests, builds and dry runs). Both real e2e journeys passed. Storage baseline reproduced the expected navigation failure, but its proof reader incorrectly assumed URL errors have `details`; corrected to verify its assertion message. Latest CI pending after that correction and R4 below.
+CI run [42299080634](https://github.com/aranlucas/live-auction/actions/runs/42299080634), head `621fbad`: the original CI gate passed (type/lint/format/OpenAPI, 23 Worker integration tests, 7 tooling tests, 21 web tests, 2 compiled SSR tests, builds and dry runs). Both real e2e journeys passed. Storage baseline reproduced the expected navigation failure, but its proof reader incorrectly assumed URL errors have `details`; corrected to verify its assertion message. Those follow-up corrections are validated by the final run below.
 
 ### R2 — unavailable session storage aborts room setup (medium, high confidence)
 
@@ -43,3 +43,14 @@ CI run [42299080634](https://github.com/aranlucas/live-auction/actions/runs/4229
 ### R4 — browser ignores invalid auction-ID pattern (low impact, high confidence)
 
 CI browser evidence in the R2 baseline logged a SyntaxError for `setup-dialog.tsx`'s `[A-Za-z0-9_-]{1,100}` pattern under the HTML `v` regex flag. The browser silently ignores an invalid pattern, so native validation no longer rejects spaces. Zod/API validation still protects persisted IDs. Escape the literal hyphen; the journey now verifies the browser reports `patternMismatch` for `invalid room` before connecting a valid ID. A separate original-component CI variant must fail that assertion.
+
+## Final CI evidence
+
+[Run 42300404655](https://github.com/aranlucas/live-auction/actions/runs/42300404655) passed all six jobs on `6e6742e`: the original CI gate, both real browser journeys, and four isolated original-component proofs. Logs were inspected:
+
+- R1 original: expected custom bid `10.25`, observed `10`.
+- R2 original: expected the auction route after connection, observed the setup URL after the blocked storage write.
+- R3 original: expected EUR activity `€10.25`, observed `$10.25`.
+- R4 original: expected native pattern mismatch for spaces, observed `false`.
+
+Each proof requires a selected failing test with the targeted `ASSERTION_FAILED`; infrastructure failures and unexpected passes fail the job. The fixed journeys also verify the final winner, exact persisted bid amounts, ordered history and correctly formatted winning activity/ledger after real deadline closure. Reports, traces, screenshots, videos and local Worker logs are uploaded as CI artifacts. No local tests/builds, deployment, production mutation, model call or credential transfer occurred. This final evidence update changes documentation only.
