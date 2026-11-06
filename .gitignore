@@ -11,3 +11,5 @@ output/playwright/
 
 # Cloudflare CLI build output and generated types
 .cloudflare/
+
+.e2e/

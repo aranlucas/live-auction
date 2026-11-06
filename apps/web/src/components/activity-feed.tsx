@@ -10,7 +10,7 @@ const eventIcon = {
   "auction.closed": Gavel,
 } as const;
 
-function eventCopy(event: AuctionEvent) {
+function eventCopy(event: AuctionEvent, currencyCode: string) {
   switch (event.type) {
     case "auction.created":
       return { title: "Lot created", detail: event.payload.title };
@@ -22,7 +22,7 @@ function eventCopy(event: AuctionEvent) {
     case "bid.accepted":
       return {
         title: event.payload.extended ? "Bid accepted · deadline extended" : "Bid accepted",
-        detail: `${event.actorId} is leading with ${currency(event.payload.amountCents)}`,
+        detail: `${event.actorId} is leading with ${currency(event.payload.amountCents, currencyCode)}`,
       };
     case "auction.cancelled":
       return {
@@ -33,7 +33,7 @@ function eventCopy(event: AuctionEvent) {
       return {
         title: "Auction closed",
         detail: event.payload.winnerId
-          ? `${event.payload.winnerId} won at ${currency(event.payload.amountCents)}`
+          ? `${event.payload.winnerId} won at ${currency(event.payload.amountCents, currencyCode)}`
           : "Closed without a winning bid",
       };
   }
@@ -45,9 +45,10 @@ function eventCopy(event: AuctionEvent) {
 
 interface ActivityFeedProps {
   events: AuctionEvent[];
+  currencyCode?: string;
 }
 
-export function ActivityFeed({ events }: ActivityFeedProps) {
+export function ActivityFeed({ events, currencyCode = "USD" }: ActivityFeedProps) {
   const activity = events.toReversed();
 
   return (
@@ -68,7 +69,7 @@ export function ActivityFeed({ events }: ActivityFeedProps) {
         ) : (
           activity.slice(0, 7).map((event) => {
             const Icon = eventIcon[event.type];
-            const copy = eventCopy(event);
+            const copy = eventCopy(event, currencyCode);
 
             return (
               <article className={`activity-row event-${event.type}`} key={event.sequence}>
