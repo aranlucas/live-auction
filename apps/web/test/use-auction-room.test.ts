@@ -230,14 +230,17 @@ describe("useAuctionRoom snapshot ordering", () => {
       occurredAt: 150,
       payload: { bidId: "bid-150", amountCents: 15000, extended: false, endsAt: 999999 },
     };
+
     const historyReads: URL[] = [];
     vi.stubGlobal(
       "fetch",
       vi.fn((input: URL) => {
         const url = new URL(input);
+
         if (!url.pathname.endsWith("/history")) {
           return Promise.resolve(Response.json({ ok: true, auction: auction(150) }));
         }
+
         historyReads.push(url);
 
         return Promise.resolve(

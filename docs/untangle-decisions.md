@@ -82,3 +82,7 @@ All tests/build/type/lint validation remains assigned to PR CI.
 CI run `42269227851` passed type checking and stopped at a lint spacing error in
 the new CLI regression. Added the required blank line; behavior tests were not
 reached in that run. No local tests were run to diagnose it.
+
+CI run `42269432684` passed type checking and Worker lint, then reported five
+web lint errors (a type-only import and statement spacing). Fixed those errors
+without changing behavior. Tests remained skipped because lint stopped the job.

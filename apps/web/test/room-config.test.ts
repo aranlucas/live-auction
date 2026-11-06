@@ -34,6 +34,7 @@ describe("room configuration restoration", () => {
       },
       stored,
     );
+
     expect(result.restored).toBe(false);
     expect(result.value.apiBaseUrl).toBe("https://other-api.test");
     expect(result.value.auctionId).toBe("saved-room");
