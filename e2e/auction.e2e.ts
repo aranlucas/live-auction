@@ -49,12 +49,14 @@ for (const blockedStorage of [false, true]) {
     await screen.getByLabel("API base URL").fill(api);
     await screen.getByLabel("Auction ID", { exact: true }).fill("invalid room");
     await expect
-      .poll(() =>
-        browser.evaluate(() => {
-          const field = document.querySelector<HTMLInputElement>("input[pattern]");
+      .poll(
+        () =>
+          browser.evaluate(() => {
+            const field = document.querySelector<HTMLInputElement>("input[pattern]");
 
-          return field?.validity.patternMismatch;
-        }),
+            return field?.validity.patternMismatch;
+          }),
+        { message: "Auction IDs containing spaces must fail native pattern validation" },
       )
       .toBe(true);
     await screen.getByLabel("Auction ID", { exact: true }).fill(auctionId);

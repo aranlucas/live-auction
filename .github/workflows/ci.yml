@@ -106,7 +106,6 @@ jobs:
           expected="10.25"
           if [ "$VERSION" = storage-before ]; then pattern="blocked storage"; expected="expect.toHaveURL"; fi
           if [ "$VERSION" = currency-before ]; then expected="€10.25"; fi
-          if [ "$VERSION" = pattern-before ]; then expected="true"; fi
           set +e
           pnpm exec e2e run --grep "$pattern" > .e2e/reproduction.log 2>&1
           result=$?
@@ -127,6 +126,9 @@ jobs:
             assert.match(error.message, /^expect\.toHaveURL failed\nexpected: URL/);
             assert.ok(error.message.includes('auctions'));
             assert.match(error.message, /observed: URL http:\/\/127\.0\.0\.1:3000\/\?api=/);
+          } else if (process.env.VERSION === 'pattern-before') {
+            assert.match(error.message, /^expect\.poll/);
+            assert.ok(error.message.includes('Auction IDs containing spaces must fail native pattern validation'));
           } else {
             assert.ok(error.details.expected.includes(process.env.EXPECTED));
           }
