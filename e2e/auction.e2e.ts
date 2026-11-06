@@ -16,6 +16,7 @@ for (const blockedStorage of [false, true]) {
     const sellerToken = await tokenFor("e2e-seller", "seller", { auctionId });
     const bidderToken = await tokenFor("e2e-bidder", "bidder", { auctionId });
     const viewerToken = await tokenFor("e2e-viewer", "viewer", { auctionId });
+
     const created = await fetch(`${api}/v1/auctions/${auctionId}`, {
       method: "PUT",
       headers: { Authorization: `Bearer ${sellerToken}`, "Content-Type": "application/json" },
@@ -29,6 +30,7 @@ for (const blockedStorage of [false, true]) {
         extensionSeconds: 0,
       }),
     });
+
     assert.equal(created.status, 201);
     assert.equal(auctionActionResultSchema.parse(await created.json()).ok, true);
 
@@ -39,7 +41,9 @@ for (const blockedStorage of [false, true]) {
         };
       });
     }
+
     await app.open(`/?api=${encodeURIComponent(api)}`);
+    await expect.poll(() => browser.evaluate(() => document.readyState)).toBe("complete");
     await screen.getByRole("button", "Advanced setup", { exact: true }).tap();
     await browser.locator("details.advanced-setup > summary").tap();
     await screen.getByLabel("API base URL").fill(api);
@@ -66,9 +70,11 @@ for (const blockedStorage of [false, true]) {
     await expect(browser.locator(".state-label")).toHaveText("CLOSED", { timeout: 60_000 });
     await expect(browser.locator(".activity-list")).toContainText("e2e-bidder won at €10.45");
     await expect(browser.locator(".event-ledger")).toContainText("winner=e2e-bidder amount=€10.45");
+
     const historyResponse = await fetch(`${api}/v1/auctions/${auctionId}/history`, {
       headers: { Authorization: `Bearer ${viewerToken}` },
     });
+
     assert.equal(historyResponse.status, 200);
     const history = historyResultSchema.parse(await historyResponse.json());
     assert.ok(history.ok);
