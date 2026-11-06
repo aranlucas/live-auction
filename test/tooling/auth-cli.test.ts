@@ -115,6 +115,7 @@ it("rejects an unsupported auction role before issuing a token", () => {
 
 it("rejects unknown token options instead of issuing a token with ignored settings", () => {
   const { privatePath } = keyFiles();
+
   const result = spawnSync(
     process.execPath,
     [

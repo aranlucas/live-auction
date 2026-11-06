@@ -78,3 +78,7 @@ following the configuration ownership fix. Fixed its sole mechanical finding
 (duplicate imports). Meaningful tests remain; no tests were removed. Local work
 was limited to dependency installation, formatting and `git diff --check`.
 All tests/build/type/lint validation remains assigned to PR CI.
+
+CI run `42269227851` passed type checking and stopped at a lint spacing error in
+the new CLI regression. Added the required blank line; behavior tests were not
+reached in that run. No local tests were run to diagnose it.
