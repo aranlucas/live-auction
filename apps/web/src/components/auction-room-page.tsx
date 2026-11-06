@@ -20,14 +20,12 @@ import { useAuctionRoom } from "#/hooks/use-auction-room";
 import {
   command,
   createAuction,
-  defaultRoomConfig,
   errorMessage,
   placeBid,
   requestDemoBidderSession,
   requestDemoSession,
-  type TestRoomConfig,
 } from "#/lib/auction-api";
-import { restoreRoomConfig } from "#/lib/room-config";
+import { restoreRoomConfig, defaultRoomConfig, type TestRoomConfig } from "#/lib/room-config";
 import { tokenSubject } from "#/lib/format";
 
 interface AuctionRoomPageProps {

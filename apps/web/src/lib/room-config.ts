@@ -1,4 +1,25 @@
-import { defaultRoomConfig, testRoomConfigSchema, type TestRoomConfig } from "./auction-api";
+import { z } from "zod";
+import { auctionIdSchema } from "cloudflare-live-auction/model";
+
+export const testRoomConfigSchema = z.strictObject({
+  apiBaseUrl: z.url(),
+  auctionId: auctionIdSchema,
+  sellerToken: z.string(),
+  bidderToken: z.string(),
+  viewerToken: z.string(),
+});
+
+export type TestRoomConfig = z.infer<typeof testRoomConfigSchema>;
+
+export const defaultRoomConfig: TestRoomConfig = {
+  apiBaseUrl: "https://cloudflare-live-auction-staging.aranlucas.workers.dev",
+  auctionId: "gavel-live-demo",
+  sellerToken: "",
+  bidderToken: "",
+  viewerToken: "",
+};
+
+export const roomSearchSchema = z.object({ api: z.url().optional() });
 
 export interface RoomRoute {
   routeAuctionId?: string;
@@ -33,7 +54,9 @@ export function restoreRoomConfig(route: RoomRoute, stored: string | null): Init
 
     if (
       !parsed.success ||
-      (route.routeAuctionId && parsed.data.auctionId !== route.routeAuctionId)
+      (route.routeAuctionId && parsed.data.auctionId !== route.routeAuctionId) ||
+      (route.routeApiBaseUrl &&
+        new URL(route.routeApiBaseUrl).href !== new URL(parsed.data.apiBaseUrl).href)
     ) {
       return fallback;
     }

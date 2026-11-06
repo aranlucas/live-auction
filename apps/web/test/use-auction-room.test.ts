@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { auctionViewSchema, type AuctionView } from "cloudflare-live-auction/model";
 import { useAuctionRoom } from "@/hooks/use-auction-room";
-import { type TestRoomConfig } from "@/lib/auction-api";
+import { type TestRoomConfig } from "@/lib/room-config";
 
 const roomConfig: TestRoomConfig = {
   apiBaseUrl: "https://auction.test",
@@ -222,6 +222,39 @@ afterEach(async () => {
 });
 
 describe("useAuctionRoom snapshot ordering", () => {
+  it("shows recent activity after the first hundred auction events", async () => {
+    const latestEvent = {
+      type: "bid.accepted",
+      sequence: 150,
+      actorId: "latest-bidder",
+      occurredAt: 150,
+      payload: { bidId: "bid-150", amountCents: 15000, extended: false, endsAt: 999999 },
+    };
+    const historyReads: URL[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: URL) => {
+        const url = new URL(input);
+        if (!url.pathname.endsWith("/history")) {
+          return Promise.resolve(Response.json({ ok: true, auction: auction(150) }));
+        }
+        historyReads.push(url);
+
+        return Promise.resolve(
+          Response.json({
+            ok: true,
+            auction: auction(150),
+            events: url.searchParams.get("afterSequence") === "50" ? [latestEvent] : [],
+          }),
+        );
+      }),
+    );
+    await render();
+    await flush();
+    expect(room.events).toContainEqual(latestEvent);
+    expect(historyReads).toHaveLength(2);
+  });
+
   it("keeps a newer socket price and deadline after a delayed HTTP response", async () => {
     const socket = await connect();
     const poll = room.auctionQuery.refetch();

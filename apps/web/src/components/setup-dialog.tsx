@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useForm } from "@tanstack/react-form";
 import { ChevronDown, KeyRound, LoaderCircle, Settings2, Sparkles, X } from "lucide-react";
-import { testRoomConfigSchema, type TestRoomConfig } from "#/lib/auction-api";
+import { testRoomConfigSchema, type TestRoomConfig } from "#/lib/room-config";
 
 interface SetupDialogProps {
   config: TestRoomConfig;
