@@ -54,7 +54,7 @@ for (const blockedStorage of [false, true]) {
           browser.evaluate(() => {
             const field = document.querySelector<HTMLInputElement>("input[pattern]");
 
-            return field?.validity.patternMismatch;
+            return field?.validity.patternMismatch ?? null;
           }),
         { message: "Auction IDs containing spaces must fail native pattern validation" },
       )
