@@ -6,7 +6,7 @@ export default defineConfig({
   test: { include: ["test/**/*.test.ts"], exclude: ["test/production/**", "test/tooling/**"] },
   plugins: [
     cloudflareTest({
-      experimental: { newConfig: { configPath: "./cloudflare.config.ts" } },
+      config: "./cloudflare.config.ts",
       miniflare: {
         // Test-only: listDurableObjectIds() can only list namespaces bound in env.
         durableObjects: { AUCTIONS: "Auction" },
