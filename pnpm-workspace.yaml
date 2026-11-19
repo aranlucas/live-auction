@@ -9,7 +9,7 @@ allowBuilds:
 autoInstallPeers: false
 minimumReleaseAgeExclude:
   - "@cloudflare/codemods@0.2.1 || 0.4.2"
-  - cf@1.0.0-beta.10 || 1.0.0-beta.14
+  - cf@1.0.0-beta.10 || 1.0.0-beta.14 || 1.0.0-rc.2
   - wrangler@4.143.0 || 4.149.0
   - "@cloudflare/vite-plugin@2.0.0-beta.sha-ad79608dd"
   - "@cloudflare/vitest-plugin@1.4.0 || 1.4.3"
